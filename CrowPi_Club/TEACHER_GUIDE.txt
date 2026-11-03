@@ -1,0 +1,215 @@
+CROWPI CLUB LESSONS  -  SETUP AND TEACHER GUIDE
+================================================
+Version 2.0  -  for the Raspberry Pi 5 CrowPi kit (board v3.2)
+
+22 club days of hands-on lessons: sensors, screens, RFID cards, IR remote,
+camera, a button piano, project games and a finale show, plus a kit check
+and optional password-locked games.
+
+Every lesson opens as one full-screen app with four tabs:
+Learn - Try it - Code - Challenge. Students never need the terminal and never
+type code: on the Code tab they only change a few highlighted values.
+
+
+------------------------------------------------------------------
+1. FOR THE SCHOOL IT ADMIN
+------------------------------------------------------------------
+WHAT IT NEEDS
+  - A Raspberry Pi 5 CrowPi kit with the standard Raspberry Pi OS desktop.
+  - Nothing else. The lessons use only software that comes on the kit
+    (Python 3, Thonny, gpiozero, lgpio, smbus, spidev, luma).
+  - No internet after installing. Nothing is sent anywhere, no accounts,
+    no tracking. Progress, scores and photos stay on that kit.
+
+INSTALL  (about 1 minute per kit)
+  Fastest - paste this ONE line into the kit's terminal (it downloads
+  everything from GitHub: github.com/palkipl/crowpi-lessons):
+
+      curl -fsSL https://raw.githubusercontent.com/palkipl/crowpi-lessons/main/install_crowpi.py -o ~/install_crowpi.py && python3 ~/install_crowpi.py --add --lock-games
+
+  Use --no-lock-games instead to leave the games open.
+
+  Without the terminal: copy install_crowpi.py onto the kit, open it in
+  Thonny and click Run (or right-click > Open With > Python 3). Choose:
+       1. ADD (install or update)   or   REMOVE
+       2. Lock the games (Minecraft, Doom, ... and the club games) with the
+          admin password?   Yes / No
+       3. The download link (already filled in - GitHub)
+  Click Start. When it says "All done!", CrowPi Lessons opens by itself.
+
+  No internet? Put CrowPi_Club.zip next to install_crowpi.py (e.g. both on a
+  USB stick) - the installer uses the zip when the download doesn't work:
+      python3 /media/$USER/*/install_crowpi.py --add --lock-games
+
+  Afterwards close Thonny once (File > Exit) so lessons start by themselves.
+
+  Many kits over SSH: the same one line, or
+      python3 install_crowpi.py --remove
+
+WHAT THE INSTALLER CHANGES ON THE KIT  (all in the user's home folder)
+  - ~/CrowPi_Club                 the lessons (locked read-only)
+  - ~/My_CrowPi_Programs          students' own files
+  - ~/Pictures/CrowPi_Photos      photos from the camera lessons
+  - The Desktop shows ONLY "CrowPi Lessons". Everything that was on the
+    Desktop before is moved (never deleted) to ~/Old_Desktop_Files, and the
+    Rubbish Bin / drive icons are hidden.
+  - CrowPi Lessons in the Raspberry menu > Education, and it opens by itself
+    at start-up (can be turned off with a button in the app).
+  - A small Thonny helper, so a lesson clicked in the app opens and runs.
+  - Older versions (an old CrowPi_Club folder on the Desktop, old lesson
+    folders) are removed. Students' files in them are kept in My_CrowPi_Programs.
+
+REMOVE
+  Run install_crowpi.py again and choose REMOVE. It takes away the lessons,
+  the app, the start-up entry and the Thonny helper, and puts the old Desktop
+  back. Students' programs and photos are kept (delete them yourself if you
+  want). If the optional .deb package was used, it asks for the admin
+  password to remove that too.
+
+UPDATE
+  Run the installer with ADD again (or open a newer CrowPi_Club.zip and
+  double-click CrowPi Lessons in it). It updates by itself; an older copy
+  never replaces a newer one.
+
+GAMES LOCK
+  Yes = the Games button asks for the admin password (default:  admin ).
+  No  = games are open to everyone. Run the installer again to change it.
+  This is a light lock, like a closed door: the game files are in the lesson
+  folder. The password is not stored in the app (only a scrambled
+  fingerprint of it).
+
+SHUT DOWN
+  The lessons and the app have a Shut down button. It uses the normal
+  desktop shutdown (the same as Raspberry menu > Shutdown) and asks first.
+
+OPTIONAL: .deb PACKAGE
+  crowpi-lessons_2.0_all.deb is another way to deliver the same app:
+      sudo apt install --no-install-recommends ~/Downloads/crowpi-lessons_2.0_all.deb
+  then restart the kit. The installer is easier; you don't need both.
+
+
+------------------------------------------------------------------
+2. IN THE CLASSROOM
+------------------------------------------------------------------
+THE CROWPI LESSONS APP
+  - One big button per day (Day 1 to Day 22) plus Bonus and Games.
+  - Green = any switches.  Orange = BUTTON MODE (see THE SWITCHES).
+  - Orange lessons, and ones that need a part, show a "Get ready" window first.
+  - Buzzer switch (top): OFF = lessons run silently. It is ON every time the
+    app opens.
+  - A tick shows on every lesson whose challenges are all done.
+    "Clear ticks" (bottom) starts again for a new group - it also resets the
+    Code tab values and missions.
+  - Bottom buttons: Shut down, Opens at start-up ON/OFF, Lesson folder,
+    My programs, Photos.
+
+EVERY LESSON IS AN APP
+  Switch Check - (BUTTON MODE lessons) press an arrow or grid button to
+                 confirm the switches are right.
+  Learn        - five short cards: what the part is and how it works.
+  Try it       - live controls and readings: sliders, buttons, graphs, a
+                 drawing grid, the piano, the alarm panel...
+                 (Days 18 and 21 have "Play" instead: the full game.)
+  Code         - the lesson's real Python program. Every grey line is locked;
+                 only the YELLOW boxes can change (numbers, words, a picture,
+                 a remote key). A wrong value turns red and says what's
+                 allowed. "Upload to kit" runs it on the kit. Each Code tab has
+                 a MISSION that ticks itself off.
+  Challenge    - 4 to 6 tasks the kit checks by itself, e.g. count the beeps,
+                 hold your hand 20 cm away for 3 seconds, write your name on
+                 an RFID card and read it back. All done = LESSON COMPLETE!
+                 Missing a part? "Skip this one".
+  "On the kit right now" copies the LED matrix, LCD and 7-segment on screen.
+
+  Bottom of every lesson:
+    Close       - closes the lesson AND Thonny (back to CrowPi Lessons)
+    Shut down   - shuts the kit down (asks first)
+    < Back / Next >  - the previous / next tab. On the last tab,
+                  "Next lesson >" opens the next day.
+
+THE SWITCHES  (UP = ON)
+  Two blocks of 8 tiny switches near the bottom of the board:
+    LEFT block  (UX1) - label starts with "BUTTON"
+    RIGHT block (UX5) - label starts with "1:13-VIBRATION MOTOR" (motor parts,
+                        not used in this club)
+  BUTTON MODE:  left block all 8 UP,  right block all 8 DOWN.
+  Set every kit to BUTTON MODE once and leave it - then every lesson works.
+  Flip switches only when no lesson is running.
+
+PARTS THAT COME LOOSE IN THE BOX
+  - RFID white card / blue key tag                          (Days 10, 20, 22)
+  - IR receiver (black, 3 legs) -> 3-hole socket marked IR,
+    rounded bump facing the tilt sensor                      (Day 16)
+  - IR remote (pull out the battery tab first)               (Day 16)
+  - Camera                                                   (Day 17)
+  The motors, servo and breadboard parts aren't used - keep them in the box.
+
+GAMES
+  Snake, Whack-a-Mole, Guess the Number, Reaction Game, Simon Says (and the
+  Games tab of the CrowPi Show). They need BUTTON MODE (Reaction: any mode).
+  Reset the high scores: type  reset  in the games password box and click
+  Unlock, then Yes. It never unlocks the games.
+
+
+------------------------------------------------------------------
+3. THE LESSONS
+------------------------------------------------------------------
+Day  File                 Switches  What it is
+ 1   hello_crowpi.py      any       Hello, CrowPi! - name on the LCD, matrix, 7-segment
+ 2   buzzer.py            any       The buzzer - beeps, lengths, patterns
+ 3   button_buzzer.py     BUTTON    Arrow buttons + buzzer - inputs and outputs
+ 4   relay.py             any       The relay - a switch the computer flips
+                                    (only listen to the click - never wall power!)
+ 5   light_sensor.py      any       Light sensor - lux, graph, night light
+ 6   dht20.py             any       Temperature + humidity
+ 7   weather_station.py   any       Weather station - temperature, humidity and
+                                    light together, day/night, comfort zone
+ 8   distance.py          any       Ultrasonic distance sensor
+ 9   lcd.py               any       LCD screen - two lines of 16 letters
+10   rfid.py              any       RFID cards - read the number, write and read text
+11   matrix_demo.py       any       8x8 LED matrix - draw, pictures, scrolling words
+12   segment.py           any       7-segment display - numbers, countdown, clock
+13   touch.py             any       Touch sensor - taps, holds, lamp
+14   button_matrix.py     BUTTON    16-button grid - rows and columns
+15   piano.py             BUTTON    Button piano - 16 notes
+16   IR.py                any       IR remote (plug in the IR receiver)
+17   camera.py            any       Camera - photos (Pictures > CrowPi_Photos)
+18   reaction_game.py     any       Reaction game - milliseconds
+19   parking_sensor.py    any       Parking sensor - closer = faster beeps
+20   security_alarm.py    any       Security alarm - RFID key card + the distance
+                                    sensor as a tripwire (closer than 30 cm = alarm)
+21   simon_says.py        BUTTON    Simon says - memory game on the grid
+22   crowpi_show.py       BUTTON    FINALE - The CrowPi Show: dashboard, 12 acts
+                                    (one per part) and the games
+Bonus matrix_lights.py    BUTTON    Each grid button turns its square on/off
+Teacher check_kit.py      any       Checks every part, saves ~/CrowPi_check_report.txt
+Games game_snake.py, game_whack.py, game_guess.py   (BUTTON)
+
+Other files: lessons_app.py (the app), crowpi_app.py (the lesson apps),
+crowpi_kit.py (talks to the hardware), crowpi_thonny_plugin.py (Thonny
+helper), install_crowpi.py (the installer). Don't change them.
+
+
+------------------------------------------------------------------
+4. IF SOMETHING DOESN'T WORK
+------------------------------------------------------------------
+- Click Kit Check in the app first. It beeps, clicks and lights everything up,
+  then lists anything to fix. The report is saved as ~/CrowPi_check_report.txt.
+- A lesson opens but doesn't start by itself -> click Run in Thonny once;
+  close Thonny (File > Exit) once after installing so its helper loads.
+- Arrow buttons or the 16-button grid do nothing -> BUTTON MODE switches.
+- Buzzer very quiet -> new kits have a protective sticker on the buzzer. Peel it off.
+- LCD lights up but shows no letters -> turn the small blue contrast screw
+  near the LCD slowly.
+- IR shows nothing -> receiver plugged in the right way round, battery tab removed.
+- The alarm rings by itself -> something is closer than 30 cm to the distance
+  sensor; move it away before the countdown ends.
+- The installer says "No lessons to install" -> check the website link, or put
+  CrowPi_Club.zip next to install_crowpi.py.
+- Shut down does nothing -> use the Raspberry menu > Shutdown.
+
+Why the original CrowPi files failed on the Pi 5 (for the record): the Pi 5
+can't use the old RPi.GPIO library, its GPIO library needs a writable folder
+(so programs crashed when run from a USB stick), and the old Adafruit LCD
+library doesn't support the Pi 5. These lessons use gpiozero like Elecrow's
+own Pi 5 code (github.com/Elecrow-RD/CrowPi_RPI5) and talk to the LCD directly.

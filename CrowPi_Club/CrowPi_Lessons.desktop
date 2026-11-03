@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=CrowPi Lessons
+GenericName=CrowPi lesson launcher
+Comment=Double-click to open the CrowPi Club lessons from this folder
+Exec=python3 -c "import os,sys,runpy; p=os.path.abspath(sys.argv[1]) if len(sys.argv)>1 else ''; d=p if os.path.isdir(p) else os.path.dirname(p); c=[x for x in [d, os.path.expanduser('~/Desktop/CrowPi_Club'), '/usr/share/crowpi-lessons'] if x and os.path.isfile(os.path.join(x,'lessons_app.py'))]; app=os.path.join(c[0],'lessons_app.py'); sys.argv=[app]+sys.argv[1:]; runpy.run_path(app, run_name='__main__')" %k
+Icon=crowpi-lessons
+Terminal=false
+Categories=Education;
+StartupWMClass=CrowPiLessons
