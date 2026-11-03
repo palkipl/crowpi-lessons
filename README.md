@@ -3,7 +3,12 @@
 22 days of hands-on lessons for the **Raspberry Pi 5 CrowPi kit** (board v3.2): sensors, screens, RFID cards, IR remote, camera, a button piano, games and a finale show.
 Every lesson opens as one app with **Learn · Try it · Code · Challenge** tabs. Students never type code: on the Code tab they only change a few highlighted values.
 
-## Install on a kit (one line)
+## Install on a kit - no terminal
+
+Download **[CrowPi_Setup.py](https://raw.githubusercontent.com/palkipl/crowpi-lessons/main/CrowPi_Setup.py)** (right-click > Save link as), open it in Thonny and click **Run**.
+A window asks: **ADD or REMOVE**, and **lock the games** (Minecraft, Doom and the club games) with the admin password - yes or no. Click Start.
+
+## Install on a kit (one line in the terminal)
 
 Open the terminal on the CrowPi and paste:
 
@@ -35,6 +40,7 @@ python3 /media/$USER/*/install_crowpi.py --add --lock-games
 
 ## Files
 
+* `CrowPi_Setup.py` - double-click setup: always downloads the newest installer
 * `install_crowpi.py` - the installer (add / remove / lock games)
 * `CrowPi_Club/` - the lessons and the CrowPi Lessons app (see `CrowPi_Club/TEACHER_GUIDE.txt`)
 * `docs/CrowPi_Club_Plan.pptx` - the club slides, one section per day

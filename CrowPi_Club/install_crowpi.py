@@ -314,11 +314,11 @@ class Installer:
                            fg=WHITE, selectcolor=BG, activebackground=PANEL, activeforeground=WHITE,
                            font=font(12, False)).grid(row=1 + i, column=0, sticky="w", columnspan=2, padx=12)
         self.lock = tk.StringVar(value="yes")
-        self.lock_label = tk.Label(box, text="2.  Lock the games (Minecraft, Doom, ... and the club games) "
-                                             "with the admin password?", bg=PANEL, fg=YELLOW, font=font(12))
+        self.lock_label = tk.Label(box, text="2.  Lock the games with the admin password?  (Minecraft, Doom ...)",
+                                   bg=PANEL, fg=YELLOW, font=font(12))
         self.lock_label.grid(row=3, column=0, sticky="w", columnspan=2, pady=(10, 0))
         self.lock_buttons = []
-        for i, (value, text) in enumerate((("yes", "Yes - every game asks for the admin password"),
+        for i, (value, text) in enumerate((("yes", "Yes - Minecraft, Doom and the club games ask for the password"),
                                            ("no", "No - games are open to everyone"))):
             b = tk.Radiobutton(box, text=text, value=value, variable=self.lock, bg=PANEL, fg=WHITE,
                                selectcolor=BG, activebackground=PANEL, activeforeground=WHITE,
@@ -328,7 +328,7 @@ class Installer:
         self.url_label = tk.Label(box, text="3.  Download from (website link):", bg=PANEL, fg=YELLOW,
                                   font=font(12))
         self.url_label.grid(row=6, column=0, sticky="w", columnspan=2, pady=(10, 2))
-        self.url = tk.Entry(box, font=font(11, False), width=62)
+        self.url = tk.Entry(box, font=font(11, False), width=56)
         self.url.insert(0, DOWNLOAD_URL)
         self.url.grid(row=7, column=0, sticky="we", padx=12)
         self.url_note = tk.Label(box, text="(empty or offline: uses a CrowPi_Club.zip next to this file, "
