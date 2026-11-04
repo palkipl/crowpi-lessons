@@ -6,7 +6,7 @@ Every lesson opens as one app with **Learn · Try it · Code · Challenge** tabs
 ## Install on a kit - no terminal
 
 Download **[CrowPi_Setup.py](https://raw.githubusercontent.com/palkipl/crowpi-lessons/main/CrowPi_Setup.py)** (right-click > Save link as), open it in Thonny and click **Run**.
-A window asks: **ADD or REMOVE**, and **lock the games** (Minecraft, Doom and the club games) with the admin password - yes or no. Click Start.
+A window asks: **ADD or REMOVE**, **lock the games** (Minecraft, Doom and the club games) with the admin password, and **kiosk mode** (only CrowPi Lessons on the screen). Click Start, then restart the kit.
 
 ## Install on a kit (one line in the terminal)
 
@@ -22,6 +22,12 @@ curl -fsSL https://raw.githubusercontent.com/palkipl/crowpi-lessons/main/install
 * Prefer a window? Run `python3 ~/install_crowpi.py` (or open it in Thonny and click Run).
 
 After installing, close Thonny once (File > Exit) so lessons start by themselves.
+
+## Kiosk mode (on by default)
+
+After a restart the kit shows **only CrowPi Lessons**, full screen - no taskbar, no desktop, no menu. Lessons open full screen from the app and **Close lesson** brings the app back.
+The small **Teacher** button (admin password) has Kit Check, the folders, a terminal, *Normal desktop until restart* and *Kiosk mode OFF*.
+Install without kiosk mode: add `--no-kiosk`.
 
 ## What it changes on the kit
 

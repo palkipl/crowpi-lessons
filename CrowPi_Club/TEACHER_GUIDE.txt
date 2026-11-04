@@ -1,6 +1,6 @@
 CROWPI CLUB LESSONS  -  SETUP AND TEACHER GUIDE
 ================================================
-Version 2.0  -  for the Raspberry Pi 5 CrowPi kit (board v3.2)
+Version 2.1  -  for the Raspberry Pi 5 CrowPi kit (board v3.2)
 
 22 club days of hands-on lessons: sensors, screens, RFID cards, IR remote,
 camera, a button piano, project games and a finale show, plus a kit check
@@ -44,7 +44,26 @@ INSTALL  (about 1 minute per kit)
   Afterwards close Thonny once (File > Exit) so lessons start by themselves.
 
   Many kits over SSH: the same one line, or
+      python3 install_crowpi.py --add --lock-games --no-kiosk     (normal desktop)
       python3 install_crowpi.py --remove
+
+KIOSK MODE  (on by default - the installer asks)
+  After a restart the kit shows ONLY CrowPi Lessons, full screen: no taskbar,
+  no desktop, no menu, no keyboard shortcuts. Lessons open full screen from the
+  app (Thonny isn't used) and "Close lesson" brings the app back. If the app is
+  ever closed it opens again by itself.
+  The way out for the teacher: the small "Teacher" button (top right) asks for
+  the admin password and has:
+      Kit Check, Clear ticks, open the lesson / programs / photos folders,
+      Open a terminal, Normal desktop until restart, Kiosk mode OFF,
+      Restart the kit.
+  Kiosk mode OFF for good: Teacher > Kiosk mode OFF (after restart), or run the
+  installer again with "No" for kiosk mode, or REMOVE.
+  It works with the Raspberry Pi OS desktops labwc, Wayfire and X11 (LXDE).
+  Every desktop file it changes is backed up as *.crowpi-backup and put back
+  when kiosk mode goes off. Emergency: Ctrl+Alt+F2 gives a text login.
+  This keeps students in the app; it is not a security lock against someone
+  who knows Linux and has the keyboard.
 
 WHAT THE INSTALLER CHANGES ON THE KIT  (all in the user's home folder)
   - ~/CrowPi_Club                 the lessons (locked read-only)
@@ -91,17 +110,18 @@ OPTIONAL: .deb PACKAGE
 ------------------------------------------------------------------
 2. IN THE CLASSROOM
 ------------------------------------------------------------------
-THE CROWPI LESSONS APP
-  - One big button per day (Day 1 to Day 22) plus Bonus and Games.
+THE CROWPI LESSONS APP  (full screen, made for kids who've never used a Pi)
+  - A big green START HERE button opens the next lesson not done yet.
+  - One big button per day (Day 1 to Day 22), plus Matrix Lights and Games.
   - Green = any switches.  Orange = BUTTON MODE (see THE SWITCHES).
   - Orange lessons, and ones that need a part, show a "Get ready" window first.
   - Buzzer switch (top): OFF = lessons run silently. It is ON every time the
     app opens.
   - A tick shows on every lesson whose challenges are all done.
-    "Clear ticks" (bottom) starts again for a new group - it also resets the
-    Code tab values and missions.
-  - Bottom buttons: Shut down, Opens at start-up ON/OFF, Lesson folder,
-    My programs, Photos.
+  - Shut down (bottom left) turns the kit off properly.
+  - Teacher (top right, admin password): Kit Check, Clear ticks (for a new
+    group - also resets the Code tab values and missions), the folders,
+    a terminal, kiosk mode, start-up, restart.
 
 EVERY LESSON IS AN APP
   Switch Check - (BUTTON MODE lessons) press an arrow or grid button to

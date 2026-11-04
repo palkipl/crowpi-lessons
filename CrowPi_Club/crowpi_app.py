@@ -440,10 +440,18 @@ class ShowApp:
         root.title(title)
         root.configure(bg=BG)
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
-        width, height = min(sw - 24, 1000), min(sh - 76, 560)
-        root.geometry("%dx%d+%d+%d" % (width, height, (sw - width) // 2, 8))
+        if os.environ.get("CROWPI_FULLSCREEN"):          # (kiosk mode: the whole screen, no taskbar)
+            width, height = sw, sh
+            root.geometry("%dx%d+0+0" % (width, height))
+            try:
+                root.attributes("-fullscreen", True)
+            except tk.TclError:
+                pass
+        else:
+            width, height = min(sw - 24, 1000), min(sh - 76, 560)
+            root.geometry("%dx%d+%d+%d" % (width, height, (sw - width) // 2, 8))
         root.minsize(760, 480)
-        self.scale = min(width / 1000, height / 560)
+        self.scale = max(0.76, min(2.2, min(width / 1000, height / 560)))
         self.scores = self.load_scores()
         self.screen = None
         self.games_unlocked = False
@@ -512,11 +520,11 @@ class ShowApp:
     def build_footer(self):
         footer = tk.Frame(self.root, bg=BG)
         footer.pack(side="bottom", fill="x", padx=12, pady=(0, 8))
-        self.button(footer, "Close", self.close_all, RED, 10, padx=12, pady=3).pack(side="left")
-        self.button(footer, "Shut down", self.shut_down, PANEL_2, 10, padx=12, pady=3).pack(side="left", padx=6)
-        self.next_button = self.button(footer, "Next  >", self.go_next, GREEN, 10, padx=14, pady=3)
+        self.button(footer, "Close lesson", self.close_all, RED, 12, padx=14, pady=4).pack(side="left")
+        self.button(footer, "Shut down", self.shut_down, PANEL_2, 10, padx=12, pady=4).pack(side="left", padx=8)
+        self.next_button = self.button(footer, "Next  >", self.go_next, GREEN, 13, padx=18, pady=4)
         self.next_button.pack(side="right")
-        self.back_button = self.button(footer, "<  Back", self.go_back, PANEL_2, 10, padx=14, pady=3)
+        self.back_button = self.button(footer, "<  Back", self.go_back, PANEL_2, 12, padx=14, pady=4)
         self.back_button.pack(side="right", padx=6)
 
     def tab_index(self):
@@ -563,13 +571,15 @@ class ShowApp:
         path = os.path.join(HERE, self.next_lesson_file() or "")
         print("[app] next lesson:", os.path.basename(path))
         thonny = thonny_process()
+        from_app = bool(os.environ.get("CROWPI_FROM_APP"))          # kiosk: CrowPi Lessons starts it
+        note = os.path.join(os.path.expanduser("~"), ".crowpi_next_lesson") if from_app else REQUEST_FILE
         try:
-            with open(REQUEST_FILE, "w", encoding="utf-8") as f:
-                json.dump({"file": path, "time": time.time()}, f)     # Thonny opens and runs it
+            with open(note, "w", encoding="utf-8") as f:
+                json.dump({"file": path, "time": time.time()}, f)     # Thonny (or the app) opens and runs it
         except OSError:
             pass
         self.close()
-        if thonny is None and not TESTING:                         # (not started from Thonny)
+        if thonny is None and not from_app and not TESTING:        # (not started from Thonny)
             subprocess.Popen([sys.executable, path], start_new_session=True)
 
     def close_all(self):

@@ -33,7 +33,7 @@ import time
 import zipfile
 
 APP_NAME = "CrowPi Lessons"
-APP_VERSION = "2.0"                  # raise this for every new version: kits update by themselves
+APP_VERSION = "2.1"                  # raise this for every new version: kits update by themselves
 APP_ID = "crowpi-lessons"
 WINDOW_CLASS = "CrowPiLessons"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -105,7 +105,6 @@ LESSONS = [
 ]
 BONUS = [
     ("Matrix Lights", "matrix_lights.py", BUTTON, ""),
-    ("Kit Check", "check_kit.py", ANY, ""),
 ]
 GAMES = [
     ("Snake", "game_snake.py", BUTTON, ""),
@@ -618,6 +617,103 @@ def lock_installed_games(lock, folder=INSTALL_DIR, log=print):
     return locked
 
 
+# ------------------------------------------------------------------
+#  KIOSK MODE: only CrowPi Lessons on the screen
+#  The desktop session (labwc / wayfire / X11 LXDE) starts kiosk.sh
+#  instead of the taskbar and the desktop. Every file we change is
+#  backed up (*.crowpi-backup) and put back when kiosk mode goes off.
+# ------------------------------------------------------------------
+KIOSK_MARK = "CrowPi kiosk"
+NEXT_LESSON = os.path.join(HOME, ".crowpi_next_lesson")       # a lesson's "Next lesson" button
+KIOSK_PAUSE = os.path.join(HOME, ".crowpi_kiosk_pause")         # Teacher menu: normal desktop until restart
+LABWC_AUTOSTART = os.path.join(CONFIG_HOME, "labwc", "autostart")
+LABWC_RC = os.path.join(CONFIG_HOME, "labwc", "rc.xml")
+LXDE_AUTOSTART = os.path.join(CONFIG_HOME, "lxsession", "LXDE-pi", "autostart")
+WAYFIRE_INI = os.path.join(CONFIG_HOME, "wayfire.ini")
+
+
+def kiosk_files(folder):
+    script = os.path.join(folder, "kiosk.sh")
+    return {
+        LABWC_AUTOSTART: "# %s - only CrowPi Lessons (delete this file for the normal desktop)\n"
+                         "command -v kanshi >/dev/null && kanshi &\n"
+                         "bash \"%s\" &\n" % (KIOSK_MARK, script),
+        LABWC_RC: '<?xml version="1.0"?>\n<!-- %s: no keyboard shortcuts or desktop menu -->\n'
+                  "<labwc_config>\n"
+                  "  <keyboard>\n"
+                  '    <keybind key="C-A-W-F12"><action name="None"/></keybind>\n'
+                  "  </keyboard>\n"
+                  "  <mouse>\n"
+                  '    <context name="Frame"><mousebind button="Left" action="Press">'
+                  '<action name="Focus"/><action name="Raise"/></mousebind></context>\n'
+                  '    <context name="Client"><mousebind button="Left" action="Press">'
+                  '<action name="Focus"/><action name="Raise"/></mousebind></context>\n'
+                  '    <context name="Root"><mousebind button="Right" action="Press">'
+                  '<action name="None"/></mousebind></context>\n'
+                  "  </mouse>\n"
+                  "</labwc_config>\n" % KIOSK_MARK,
+        LXDE_AUTOSTART: "# %s - only CrowPi Lessons (delete this file for the normal desktop)\n"
+                        "@bash \"%s\"\n" % (KIOSK_MARK, script),
+    }
+
+
+def is_ours(path):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return KIOSK_MARK in f.read(400)
+    except OSError:
+        return False
+
+
+def kiosk_on():
+    return load_config().get("kiosk", False) is True
+
+
+def set_kiosk(on, folder=INSTALL_DIR, log=print):
+    """Kiosk mode on or off (from the next start of the kit)."""
+    for path, text in kiosk_files(folder).items():
+        backup = path + ".crowpi-backup"
+        if on:
+            if os.path.exists(path) and not is_ours(path) and not os.path.exists(backup):
+                shutil.copyfile(path, backup)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+        else:
+            if is_ours(path):
+                os.remove(path)
+            if os.path.exists(backup):
+                shutil.move(backup, path)
+    backup = WAYFIRE_INI + ".crowpi-backup"
+    if on and os.path.exists(WAYFIRE_INI) and not is_ours(WAYFIRE_INI):
+        with open(WAYFIRE_INI, encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+        if not os.path.exists(backup):
+            shutil.copyfile(WAYFIRE_INI, backup)
+        kept, section = [], ""
+        for line in lines:
+            if line.strip().startswith("["):
+                section = line.strip()
+            if section != "[autostart]":
+                kept.append(line)
+        kept += ["", "[autostart]", "# " + KIOSK_MARK, "autostart_wf_shell = false",
+                 'crowpi = bash "%s"' % os.path.join(folder, "kiosk.sh")]
+        with open(WAYFIRE_INI, "w", encoding="utf-8") as f:
+            f.write("# %s - the normal file is in wayfire.ini.crowpi-backup\n" % KIOSK_MARK + "\n".join(kept) + "\n")
+    elif not on and os.path.exists(backup):
+        shutil.move(backup, WAYFIRE_INI)
+    command = 'python3 "' + os.path.join(folder, "lessons_app.py") + '"'
+    icon = USER_ICON if os.path.exists(USER_ICON) else APP_ID
+    try:                                        # kiosk.sh starts the app - not the normal start-up entry
+        os.makedirs(os.path.dirname(AUTOSTART), exist_ok=True)
+        with open(AUTOSTART, "w", encoding="utf-8") as f:
+            f.write(autostart_entry(command, icon, autostart_on() and not on))
+    except OSError:
+        pass
+    save_config(kiosk=bool(on))
+    log("Kiosk mode (only CrowPi Lessons on the screen): " + ("ON - from the next start" if on else "OFF"))
+
+
 def games_locked():
     return load_config().get("games_locked", True) is not False
 
@@ -718,6 +814,10 @@ def install_kit(source, log=print):
         lock_installed_games(games_locked(), target, log)
     except OSError as problem:
         log("Could not lock the installed games: " + str(problem))
+    try:
+        set_kiosk(kiosk_on(), target, log)
+    except OSError as problem:
+        log("Could not set kiosk mode: " + str(problem))
     version = folder_version(target) or (0,)
     remove_old_versions(version, log)
     save_config(lesson_folder=target, installed_version=version_text(version))
@@ -801,6 +901,25 @@ def thonny_command():
     return [sys.executable, "-m", "thonny"]
 
 
+def open_terminal(run=None):
+    """A terminal window (teacher only), optionally running a command in it."""
+    for program, flag in (("lxterminal", "-e"), ("x-terminal-emulator", "-e"), ("foot", None), ("xterm", "-e")):
+        if shutil.which(program):
+            command = [program]
+            if run:
+                command += ([flag] if flag else []) + run
+            subprocess.Popen(command, cwd=HOME, start_new_session=True)
+            return
+
+
+def restart_kit():
+    try:
+        if subprocess.call(["systemctl", "reboot"], timeout=20) != 0:
+            subprocess.call(["sudo", "-n", "reboot"], timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def open_folder(folder):
     os.makedirs(folder, exist_ok=True)
     subprocess.Popen(["xdg-open", folder], stdout=subprocess.DEVNULL,
@@ -823,17 +942,18 @@ class LessonsApp:
         self.games_unlocked = not self.games_locked   # (locked again every time the app opens)
         self.buzzer_on = True                     # the Buzzer switch is ON every time the app opens
         save_buzzer_setting(True)
-        root.protocol("WM_DELETE_WINDOW", self.close)
+        self.kiosk = kiosk_on()                   # only CrowPi Lessons on this kit (set by the installer)
+        self.child = None                         # the lesson that is running (kiosk mode)
+        root.protocol("WM_DELETE_WINDOW", self.close if not self.kiosk else lambda: None)
         root.title(APP_NAME)
         root.configure(bg=BG)
         screen_w, screen_h = root.winfo_screenwidth(), root.winfo_screenheight()
-        width, height = min(screen_w - 24, 1000), min(screen_h - 76, 560)
-        root.geometry("%dx%d+%d+%d" % (width, height, (screen_w - width) // 2, 8))
-        root.minsize(640, 400)
-        small = screen_h < 720
-        self.font = ("DejaVu Sans", 10 if small else 12, "bold")
-        self.title_font = ("DejaVu Sans", 18 if small else 22, "bold")
-        self.pad = 3 if small else 5
+        root.geometry("%dx%d+0+0" % (screen_w, screen_h))
+        self.fullscreen()                         # the whole screen, no taskbar
+        self.s = max(0.85, min(2.2, min(screen_w / 1000, screen_h / 560)))
+        self.font = ("DejaVu Sans", int(12 * self.s), "bold")
+        self.title_font = ("DejaVu Sans", int(26 * self.s), "bold")
+        self.pad = max(3, int(5 * self.s))
         self.set_window_icon()
         self.root.after(500, self.check_raise)
         if folder:
@@ -864,15 +984,22 @@ class LessonsApp:
         self.update_ticks()
         self.root.after(500, self.check_raise)
 
+    def fullscreen(self):
+        try:
+            self.root.attributes("-fullscreen", True)
+        except self.tk.TclError:
+            pass
+
     def close(self):
         save_buzzer_setting(True)                 # app closed: the buzzer is back to normal
+        self.stop_lesson()
         self.root.destroy()
 
     def buzzer_switch(self, parent):
         """A switch you click: Buzzer ON (green, knob right) / OFF (grey, knob left)."""
         box = self.tk.Frame(parent, bg=BG)
         self.label(box, "Buzzer", 11, True, "white").pack(side="left", padx=(0, 6))
-        width, height = 64, 28
+        width, height = int(64 * self.s), int(28 * self.s)
         switch = self.tk.Canvas(box, width=width, height=height, bg=BG, highlightthickness=0,
                                 cursor="hand2")
         switch.pack(side="left")
@@ -888,7 +1015,7 @@ class LessonsApp:
             switch.create_oval(knob, 3, knob + height - 6, height - 3, fill="white", outline="white")
             switch.create_text(r + 2 if self.buzzer_on else width - r - 2, r,
                                text="ON" if self.buzzer_on else "OFF", fill="white",
-                               font=("DejaVu Sans", 9, "bold"))
+                               font=("DejaVu Sans", int(9 * self.s), "bold"))
 
         def flip(_event=None):
             self.buzzer_on = not self.buzzer_on
@@ -905,10 +1032,14 @@ class LessonsApp:
             child.destroy()
 
     def label(self, parent, text, size=10, bold=False, color="#C9D3E3", **options):
+        size = max(8, int(size * getattr(self, "s", 1)))
+        if "wraplength" in options:
+            options["wraplength"] = int(options["wraplength"] * getattr(self, "s", 1))
         return self.tk.Label(parent, text=text, fg=color, bg=options.pop("bg", BG),
                              font=("DejaVu Sans", size, "bold" if bold else "normal"), **options)
 
     def button(self, parent, text, command, color="#3A4560", active="#4B5878", size=10, **options):
+        size = max(8, int(size * getattr(self, "s", 1)))
         return self.tk.Button(parent, text=text, command=command, bg=color, fg="white",
                               activebackground=active, activeforeground="white", relief="flat",
                               bd=0, font=("DejaVu Sans", size, "bold"), cursor="hand2", **options)
@@ -917,27 +1048,42 @@ class LessonsApp:
         if getattr(self, "status", None) is not None:
             self.status.config(text=text)
 
-    # ---------- screen 1: the lessons ----------
+    # ---------- screen 1: the lessons (made for kids: big buttons, one obvious next step) ----------
+    def next_lesson(self):
+        done = lessons_done()
+        for lesson in LESSONS:
+            if lesson[1] not in done:
+                return lesson
+        return None
+
     def show_lessons(self):
         tk = self.tk
         self.clear()
         self.lesson_buttons = {}
         ensure_my_programs(self.folder)
         header = tk.Frame(self.root, bg=BG)
-        header.pack(fill="x", padx=12, pady=(8, 2))
+        header.pack(fill="x", padx=16, pady=(12, 0))
         title = self.label(header, APP_NAME, color="white")
         title.configure(font=self.title_font)
         title.pack(side="left")
-        legend = tk.Frame(header, bg=BG)
-        legend.pack(side="right")
-        self.buzzer_switch(header).pack(side="right", padx=(0, 18))
-        for mode, text in ((ANY, "any switches"), (BUTTON, "BUTTON MODE")):
-            self.label(legend, " " + text + " ", 9, True, "white", bg=COLORS[mode]).pack(side="left", padx=3)
-        self.label(self.root, "Click a lesson: it opens as an app with Learn, Try it, Code and Challenge. "
-                              "Click Close in the lesson when you're done.").pack(anchor="w", padx=14)
+        self.button(header, "Teacher", self.teacher_menu, "#2A3347", "#3A4560", 9, padx=10,
+                    pady=3).pack(side="right", padx=(12, 0))
+        self.buzzer_switch(header).pack(side="right")
+        self.label(self.root, "Tap a day to start.  The lesson shows you what to do.  "
+                              "Tap  Close lesson  when you're done.", 13, False, "#C9D3E3").pack(
+            anchor="w", padx=18, pady=(2, 6))
+
+        nxt = self.next_lesson()                  # the big "start here" button
+        if nxt is not None:
+            text = "START HERE:   " + nxt[0].replace("\n", "  -  ") + "   >"
+            self.button(self.root, text, lambda: self.start(nxt), COLORS[ANY], ACTIVE[ANY], 17,
+                        pady=int(8 * self.s)).pack(fill="x", padx=16, pady=(0, 6))
+        else:
+            self.label(self.root, "All 22 days done - amazing!  Play any lesson again, or try the Games.",
+                       15, True, "#FFD866").pack(anchor="w", padx=18, pady=(0, 6))
 
         grid = tk.Frame(self.root, bg=BG)
-        grid.pack(fill="both", expand=True, padx=10, pady=(6, 2))
+        grid.pack(fill="both", expand=True, padx=12, pady=(2, 2))
         columns = 6
         for i, lesson in enumerate(LESSONS):
             self.lesson_button(grid, lesson).grid(row=i // columns, column=i % columns,
@@ -947,42 +1093,19 @@ class LessonsApp:
         for r in range((len(LESSONS) + columns - 1) // columns):
             grid.rowconfigure(r, weight=1, uniform="rows")
 
-        self.label(self.root, "Bonus", 11, True, "white").pack(anchor="w", padx=14, pady=(4, 0))
-        bonus = tk.Frame(self.root, bg=BG)
-        bonus.pack(fill="x", padx=10)
-        for i, lesson in enumerate(BONUS):
-            self.lesson_button(bonus, lesson).grid(row=0, column=i, padx=self.pad,
-                                                   pady=self.pad, sticky="nsew")
-            bonus.columnconfigure(i, weight=1, uniform="bonus")
+        bottom = tk.Frame(self.root, bg=BG)
+        bottom.pack(fill="x", padx=12, pady=(2, 10))
+        self.button(bottom, "Shut down", self.shut_down, "#B23B3B", "#C94A4A", 13,
+                    width=10, pady=int(6 * self.s)).pack(side="left", padx=self.pad)
         games_text = "Games" if self.games_unlocked else "Games  (locked)"
-        self.button(bonus, games_text, self.open_games, "#7B3FC4", "#8E52D8", self.font[1],
-                    width=1, height=2).grid(row=0, column=len(BONUS), padx=self.pad,
-                                            pady=self.pad, sticky="nsew")
-        bonus.columnconfigure(len(BONUS), weight=1, uniform="bonus")
-
-        footer = tk.Frame(self.root, bg=BG)
-        footer.pack(fill="x", padx=12, pady=(4, 8))
-        # buttons first, so a long message can never push them off the window
-        self.button(footer, "Shut down", self.shut_down, "#B23B3B", "#C94A4A", 9,
-                    padx=8, pady=3).pack(side="left", padx=(0, 8))
-        self.button(footer, "Photos", lambda: open_folder(PHOTOS), size=9,
-                    padx=8, pady=3).pack(side="right", padx=4)
-        self.button(footer, "My programs", lambda: open_folder(MY_PROGRAMS), size=9,
-                    padx=8, pady=3).pack(side="right", padx=4)
-        self.button(footer, "Lesson folder", lambda: open_folder(self.folder), size=9,
-                    padx=8, pady=3).pack(side="right", padx=4)
-        self.button(footer, "Clear ticks", self.clear_ticks, size=9, padx=8, pady=3).pack(side="right", padx=4)
-        if os.path.realpath(self.folder) == os.path.realpath(INSTALL_DIR):
-            on = autostart_on()
-            self.button(footer, "Opens at start-up: " + ("ON" if on else "OFF"),
-                        self.toggle_autostart, COLORS[ANY] if on else "#3A4560",
-                        ACTIVE[ANY] if on else "#4B5878", 9, padx=8, pady=3).pack(side="right", padx=4)
-        else:
-            self.button(footer, "Install on this kit", self.install, COLORS[ANY], ACTIVE[ANY], 9,
-                        padx=8, pady=3).pack(side="right", padx=4)
-        self.status = self.label(footer, "", 10, True, "#FFD866", anchor="w")
-        self.status.pack(side="left", fill="x", expand=True)
-        self.say("Version %s" % APP_VERSION)
+        self.button(bottom, games_text, self.open_games, "#7B3FC4", "#8E52D8", 13,
+                    width=14, pady=int(6 * self.s)).pack(side="right", padx=self.pad)
+        for lesson in BONUS:
+            b = self.lesson_button(bottom, lesson, small=True)
+            b.pack(side="right", padx=self.pad)
+        self.status = self.label(bottom, "", 11, True, "#FFD866", anchor="w")
+        self.status.pack(side="left", fill="x", expand=True, padx=10)
+        self.say("Orange = BUTTON MODE")
 
     def clear_ticks(self):
         """Start the ticks again (e.g. a new student on this kit)."""
@@ -1002,10 +1125,14 @@ class LessonsApp:
         self.say("CrowPi Lessons will " + ("" if autostart_on() else "NOT ") +
                  "open by itself when the kit starts.")
 
-    def lesson_button(self, parent, lesson):
+    def lesson_button(self, parent, lesson, small=False):
         text, filename, mode = lesson[0], lesson[1], lesson[2]
-        b = self.button(parent, self.with_tick(text, filename), lambda: self.start(lesson), COLORS[mode],
-                        ACTIVE[mode], self.font[1], width=1, height=2, wraplength=140)
+        if small:
+            b = self.button(parent, self.with_tick(text.replace("\n", " "), filename), lambda: self.start(lesson),
+                            COLORS[mode], ACTIVE[mode], 13, padx=14, pady=int(6 * self.s))
+        else:
+            b = self.button(parent, self.with_tick(text, filename), lambda: self.start(lesson), COLORS[mode],
+                            ACTIVE[mode], 13, width=1, height=2, wraplength=int(150 * self.s))
         self.lesson_buttons[filename] = (b, text)
         return b
 
@@ -1036,6 +1163,12 @@ class LessonsApp:
             self.say("OK - nothing started.")
             return
         save_buzzer_setting(self.buzzer_on)       # the switch counts for every start
+        if self.kiosk and filename == "check_kit.py":             # text output: show it in a terminal
+            open_terminal(["bash", "-c", 'python3 "%s"; echo; read -p "Press Enter to close "' % path])
+            return
+        if self.kiosk:
+            self.run_lesson(path)
+            return
         try:
             with open(REQUEST, "w", encoding="utf-8") as f:
                 json.dump({"file": path, "time": time.time()}, f)
@@ -1051,6 +1184,122 @@ class LessonsApp:
             self.say("Starting " + filename + " in Thonny...")
         else:
             self.say("Opened " + filename + " in Thonny - click the green Run button.")
+
+    # ---------- kiosk mode: lessons run straight from here, full screen ----------
+    def run_lesson(self, path):
+        """Start a lesson (no Thonny) and hide this window until it's closed."""
+        self.stop_lesson()
+        try:
+            os.remove(NEXT_LESSON)
+        except OSError:
+            pass
+        env = dict(os.environ, CROWPI_FULLSCREEN="1", CROWPI_FROM_APP="1")
+        log_path = os.path.join(HOME, ".crowpi_last_lesson.log")
+        try:
+            with open(log_path, "w", encoding="utf-8") as log:
+                self.child = subprocess.Popen([sys.executable, path], cwd=HOME, env=env, stdin=subprocess.DEVNULL,
+                                              stdout=log, stderr=subprocess.STDOUT)
+        except OSError as problem:
+            self.say("That lesson didn't start: %s" % problem)
+            return
+        self.child_started = time.time()
+        self.child_path = path
+        self.root.withdraw()
+        self.root.after(400, self.watch_lesson)
+
+    def watch_lesson(self):
+        child = self.child
+        if child is None:
+            return
+        if child.poll() is None:
+            self.root.after(400, self.watch_lesson)
+            return
+        self.child = None
+        quick_crash = child.returncode not in (0, None) and time.time() - self.child_started < 8
+        try:                                     # the lesson's "Next lesson" button
+            with open(NEXT_LESSON, encoding="utf-8") as f:
+                upcoming = json.load(f).get("file", "")
+            os.remove(NEXT_LESSON)
+        except (OSError, ValueError, AttributeError):
+            upcoming = ""
+        if upcoming and os.path.exists(upcoming) and not quick_crash:
+            self.run_lesson(upcoming)
+            return
+        self.root.deiconify()
+        self.fullscreen()
+        self.show_lessons()
+        if quick_crash:
+            self.message("That lesson stopped", "Something went wrong when the lesson started.\n"
+                         "Check the switches and the parts, then try again.\n"
+                         "(Teacher: the details are in ~/.crowpi_last_lesson.log)")
+
+    def stop_lesson(self):
+        child = getattr(self, "child", None)
+        if child is not None and child.poll() is None:
+            child.terminate()
+            try:
+                child.wait(timeout=3)
+            except subprocess.SubprocessError:
+                child.kill()
+        self.child = None
+
+    # ---------- the Teacher menu (admin password) ----------
+    def teacher_menu(self):
+        if not self.check_password("Teacher menu"):
+            return
+        window = self.popup("Teacher menu")
+        self.label(window, "Teacher menu", 18, True, "white").pack(padx=24, pady=(16, 8))
+        grid = self.tk.Frame(window, bg=BG)
+        grid.pack(padx=20, pady=4)
+
+        def item(text, command, color="#3A4560", row=0, column=0):
+            def run():
+                window.destroy()
+                command()
+            self.button(grid, text, run, color, "#4B5878", 12, width=26, pady=int(5 * self.s)).grid(
+                row=row, column=column, padx=6, pady=5, sticky="ew")
+
+        items = [("Kit Check (test every part)", lambda: self.start(("Kit Check", "check_kit.py", ANY, ""))),
+                 ("Clear ticks + Code values", self.clear_ticks),
+                 ("Open the lesson folder", lambda: open_folder(self.folder)),
+                 ("Open students' programs", lambda: open_folder(MY_PROGRAMS)),
+                 ("Open the photos", lambda: open_folder(PHOTOS)),
+                 ("Open a terminal", open_terminal)]
+        if self.kiosk:
+            items += [("Normal desktop until restart", self.pause_kiosk),
+                      ("Kiosk mode OFF (after restart)", lambda: self.switch_kiosk(False))]
+        else:
+            items += [("Kiosk mode ON (after restart)", lambda: self.switch_kiosk(True)),
+                      ("Opens at start-up: " + ("ON" if autostart_on() else "OFF"), self.toggle_autostart)]
+        items += [("Restart the kit", restart_kit)]
+        if not self.kiosk:
+            items += [("Close CrowPi Lessons", self.close)]
+        for i, (text, command) in enumerate(items):
+            item(text, command, row=i // 2, column=i % 2)
+        self.button(window, "Back", window.destroy, COLORS[ANY], ACTIVE[ANY], 13, padx=20,
+                    pady=int(5 * self.s)).pack(pady=(10, 16))
+        self.label(window, "Version %s" % APP_VERSION, 9).pack(pady=(0, 10))
+        self.place(window)
+
+    def pause_kiosk(self):
+        """The taskbar and desktop come back until the next restart."""
+        try:
+            open(KIOSK_PAUSE, "w", encoding="utf-8").close()
+        except OSError:
+            pass
+        self.close()
+
+    def switch_kiosk(self, on):
+        try:
+            set_kiosk(on, self.folder, lambda _t: None)
+        except OSError as problem:
+            self.message("Couldn't change kiosk mode", str(problem))
+            return
+        self.kiosk = on
+        self.message("Kiosk mode " + ("ON" if on else "OFF"),
+                     ("From the next restart only CrowPi Lessons is on the screen." if on else
+                      "From the next restart the kit has the normal desktop again.") +
+                     "\nUse Teacher menu > Restart the kit.")
 
     def install(self):
         lines: list = []
@@ -1074,6 +1323,9 @@ class LessonsApp:
                      "start by themselves next time.")
 
     # ---------- screen 3: games (admin password) ----------
+    def check_password(self, title):
+        return self.ask_password(title)
+
     def open_games(self):
         if not self.games_unlocked:
             if not self.ask_password():
@@ -1081,10 +1333,10 @@ class LessonsApp:
             self.games_unlocked = True
         self.show_games()
 
-    def ask_password(self):
+    def ask_password(self, title="Games are locked"):
         """Ask for the admin password. True if it is right."""
         window = self.popup("Admin password")
-        self.label(window, "Games are locked", 16, True, "white").pack(padx=24, pady=(14, 4))
+        self.label(window, title, 16, True, "white").pack(padx=24, pady=(14, 4))
         self.label(window, "Type the admin password:", 12).pack(padx=24)
         entry = self.tk.Entry(window, show="*", font=("DejaVu Sans", 14), width=16)
         entry.pack(padx=24, pady=8)
@@ -1093,7 +1345,7 @@ class LessonsApp:
         answer = {"ok": False}
 
         def check(_event=None):
-            if entry.get().strip().lower() == "reset":          # "reset" = clear the high scores
+            if entry.get().strip().lower() == "reset" and title == "Games are locked":   # = clear the high scores
                 entry.delete(0, "end")
                 if reset_high_scores(window):
                     note.config(text="High scores reset!", fg="#7CFFB0")
@@ -1280,6 +1532,7 @@ def main():
     if "--help" in sys.argv:
         print("CrowPi Lessons. Options: --install (install from the lesson folder), "
               "--lock-games / --no-lock-games (games behind the admin password or not), "
+              "--kiosk / --no-kiosk (only CrowPi Lessons on the screen, from the next start), "
               "--find (print the lesson folder)")
         return 0
     folder = find_lesson_folder()
@@ -1288,6 +1541,8 @@ def main():
         return 0 if folder else 1
     if "--lock-games" in sys.argv or "--no-lock-games" in sys.argv:
         save_config(games_locked="--lock-games" in sys.argv)      # (the installer asks)
+    if "--kiosk" in sys.argv or "--no-kiosk" in sys.argv:
+        save_config(kiosk="--kiosk" in sys.argv)                  # (the installer asks)
     if "--install" in sys.argv:
         if not folder:
             print("Can't find the lesson files. Extract CrowPi_Club.zip first "
