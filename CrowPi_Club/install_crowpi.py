@@ -10,15 +10,14 @@
 #          CrowPi_Club.zip next to this file / in Downloads / on a USB
 #          stick), installs the lessons, makes CrowPi Lessons the only
 #          icon on the Desktop and opens it at every start-up.
-#          LOCK GAMES = the games that came on the kit (Minecraft, Doom and
-#          the rest of the Games menu) and the club games ask for the admin
-#          password before they start.
+#          LOCK = every app in the Raspberry menu (browser, terminal, files,
+#          settings, Minecraft, ...) and the club games ask for the admin
+#          password before they open. CrowPi Lessons always opens.
 #  REMOVE  takes everything away again and puts the Desktop back.
 #          Students' own programs and photos are kept.
 #
 #  Many kits at once (over SSH), no window:
-#      python3 install_crowpi.py --add --lock-games            (kiosk mode is on by default)
-#      python3 install_crowpi.py --add --lock-games --no-kiosk
+#      python3 install_crowpi.py --add --lock-games            (every app asks for the password)
 #      python3 install_crowpi.py --add --no-lock-games --url https://.../CrowPi_Club.zip
 #  or straight from GitHub on a fresh kit (one line):
 #      curl -fsSL https://raw.githubusercontent.com/palkipl/crowpi-lessons/main/install_crowpi.py \
@@ -156,7 +155,7 @@ def start_lessons_app():
 # ==================================================================
 #  ADD
 # ==================================================================
-def add(url, lock_games, log, progress=lambda _f: None, kiosk=True):
+def add(url, lock_games, log, progress=lambda _f: None, kiosk=False):
     zip_path = None
     links = [url] if url else []
     if url.startswith("https://"):
@@ -187,15 +186,11 @@ def add(url, lock_games, log, progress=lambda _f: None, kiosk=True):
     shutil.rmtree(files, ignore_errors=True)
     if result.returncode != 0 or not os.path.exists(os.path.join(INSTALL_DIR, "lessons_app.py")):
         raise RuntimeError("The install didn't finish - see the messages above.")
-    log("Games: " + ("LOCKED with the admin password (installed games and club games)" if lock_games
-                     else "open (no password)"))
-    log("Kiosk mode: " + ("ON - after a restart only CrowPi Lessons is on the screen" if kiosk else "OFF"))
+    log("Apps: " + ("LOCKED - every app except CrowPi Lessons asks for the admin password" if lock_games
+                    else "open (no password)"))
     log("DONE! CrowPi Lessons %s is installed." % version_of(INSTALL_DIR))
-    if kiosk:
-        log("RESTART THE KIT to start kiosk mode. (Teacher button in the app = way out, password admin.)")
-    else:
-        log("Close Thonny once (File > Exit) so lessons can start by themselves.")
-        start_lessons_app()
+    log("Close Thonny once (File > Exit) so lessons can start by themselves.")
+    start_lessons_app()
 
 
 # ==================================================================
@@ -244,7 +239,8 @@ KIOSK_FILES = [os.path.join(CONFIG_HOME, "labwc", "autostart"), os.path.join(CON
 
 
 def undo_kiosk(log):
-    """Put the normal desktop session files back (kiosk mode off)."""
+    """Put the normal desktop session files back (older versions had a kiosk mode)."""
+    changed = False
     for path in KIOSK_FILES:
         backup = path + ".crowpi-backup"
         try:
@@ -254,9 +250,12 @@ def undo_kiosk(log):
             ours = False
         if ours:
             os.remove(path)
+            changed = True
         if os.path.exists(backup):
             shutil.move(backup, path)
-    log("Kiosk mode OFF - the normal desktop comes back after a restart")
+            changed = True
+    if changed:
+        log("Kiosk mode OFF - the normal desktop comes back after a restart")
 
 
 def remove(log, progress=lambda _f: None):
@@ -325,7 +324,7 @@ class Installer:
         self.tk, self.root = tk, root
         root.title("CrowPi Lessons - Installer")
         root.configure(bg=BG)
-        root.geometry("720x640")
+        root.geometry("720x580")
         root.minsize(600, 480)
         def font(size, bold=True):
             return ("DejaVu Sans", size, "bold" if bold else "normal")
@@ -344,28 +343,18 @@ class Installer:
                            fg=WHITE, selectcolor=BG, activebackground=PANEL, activeforeground=WHITE,
                            font=font(12, False)).grid(row=1 + i, column=0, sticky="w", columnspan=2, padx=12)
         self.lock = tk.StringVar(value="yes")
-        self.lock_label = tk.Label(box, text="2.  Lock the games with the admin password?  (Minecraft, Doom ...)",
+        self.lock_label = tk.Label(box, text="2.  Lock every app with the admin password?",
                                    bg=PANEL, fg=YELLOW, font=font(12))
         self.lock_label.grid(row=3, column=0, sticky="w", columnspan=2, pady=(10, 0))
         self.lock_buttons = []
-        for i, (value, text) in enumerate((("yes", "Yes - Minecraft, Doom and the club games ask for the password"),
-                                           ("no", "No - games are open to everyone"))):
+        for i, (value, text) in enumerate((("yes", "Yes - only CrowPi Lessons opens without it (browser, Minecraft, ... ask)"),
+                                           ("no", "No - every app is open"))):
             b = tk.Radiobutton(box, text=text, value=value, variable=self.lock, bg=PANEL, fg=WHITE,
                                selectcolor=BG, activebackground=PANEL, activeforeground=WHITE,
                                font=font(12, False))
             b.grid(row=4 + i, column=0, sticky="w", columnspan=2, padx=12)
             self.lock_buttons.append(b)
-        self.kiosk = tk.StringVar(value="yes")
-        tk.Label(box, text="3.  Kiosk mode: block everything except CrowPi Lessons?", bg=PANEL, fg=YELLOW,
-                 font=font(12)).grid(row=6, column=0, sticky="w", columnspan=2, pady=(10, 0))
-        for i, (value, text) in enumerate((("yes", "Yes - full screen, no taskbar, no desktop (best for students)"),
-                                           ("no", "No - the normal Raspberry Pi desktop"))):
-            b = tk.Radiobutton(box, text=text, value=value, variable=self.kiosk, bg=PANEL, fg=WHITE,
-                               selectcolor=BG, activebackground=PANEL, activeforeground=WHITE,
-                               font=font(12, False))
-            b.grid(row=7 + i, column=0, sticky="w", columnspan=2, padx=12)
-            self.lock_buttons.append(b)
-        self.url_label = tk.Label(box, text="4.  Download from:", bg=PANEL, fg=YELLOW, font=font(12))
+        self.url_label = tk.Label(box, text="3.  Download from:", bg=PANEL, fg=YELLOW, font=font(12))
         self.url_label.grid(row=9, column=0, sticky="w", columnspan=2, pady=(10, 2))
         self.url = tk.Entry(box, font=font(11, False), width=56)
         self.url.insert(0, DOWNLOAD_URL)
@@ -412,13 +401,12 @@ class Installer:
             return
         self.go.config(state="disabled")
         self.fraction = 0.0
-        url, lock, kiosk = self.url.get().strip(), self.lock.get() == "yes", self.kiosk.get() == "yes"
+        url, lock = self.url.get().strip(), self.lock.get() == "yes"
 
         def work():
             try:
                 if mode == "add":
-                    add(url, lock, self.log, self.progress, kiosk)
-                    self.restart_offer = kiosk
+                    add(url, lock, self.log, self.progress)
                 else:
                     remove(self.log, self.progress)
                 self.done = True
@@ -441,12 +429,7 @@ class Installer:
             from tkinter import messagebox
             ok, self.done = self.done, None
             self.go.config(state="normal")
-            if ok and getattr(self, "restart_offer", False):
-                self.restart_offer = False
-                if messagebox.askyesno("CrowPi Lessons", "All done! Restart the kit now to start kiosk mode?",
-                                       parent=self.root):
-                    subprocess.call(["systemctl", "reboot"])
-            elif ok:
+            if ok:
                 messagebox.showinfo("CrowPi Lessons", "All done!", parent=self.root)
             else:
                 messagebox.showerror("CrowPi Lessons", "That didn't work - see the messages.", parent=self.root)
@@ -461,7 +444,8 @@ def main():
                 remove(print)
             else:
                 url = args[args.index("--url") + 1] if "--url" in args else DOWNLOAD_URL
-                add(url, "--no-lock-games" not in args, print, kiosk="--no-kiosk" not in args)
+                lock = "--no-lock-games" not in args and "--no-lock-apps" not in args
+                add(url, lock, print)
             return 0
         except Exception as problem:
             print("PROBLEM:", problem)

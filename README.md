@@ -6,7 +6,7 @@ Every lesson opens as one app with **Learn · Try it · Code · Challenge** tabs
 ## Install on a kit - no terminal
 
 Download **[CrowPi_Setup.py](https://raw.githubusercontent.com/palkipl/crowpi-lessons/main/CrowPi_Setup.py)** (right-click > Save link as), open it in Thonny and click **Run**.
-A window asks: **ADD or REMOVE**, **lock the games** (Minecraft, Doom and the club games) with the admin password, and **kiosk mode** (only CrowPi Lessons on the screen). Click Start, then restart the kit.
+A window asks: **ADD or REMOVE**, and **lock every app** with the admin password (only CrowPi Lessons opens without it). Click Start.
 
 ## Install on a kit (one line in the terminal)
 
@@ -16,18 +16,15 @@ Open the terminal on the CrowPi and paste:
 curl -fsSL https://raw.githubusercontent.com/palkipl/crowpi-lessons/main/install_crowpi.py -o ~/install_crowpi.py && python3 ~/install_crowpi.py --add --lock-games
 ```
 
-* `--lock-games` - the installed games (Minecraft, Doom, ...) and the club games ask for the admin password.
-  Use `--no-lock-games` to leave them open.
+* `--lock-games` - every app except CrowPi Lessons asks for the admin password. Use `--no-lock-games` to leave them open.
 * Remove everything again: `python3 ~/install_crowpi.py --remove`
 * Prefer a window? Run `python3 ~/install_crowpi.py` (or open it in Thonny and click Run).
 
 After installing, close Thonny once (File > Exit) so lessons start by themselves.
 
-## Kiosk mode (on by default)
+## Lock every app
 
-After a restart the kit shows **only CrowPi Lessons**, filling the screen - the top bar stays (clock, Wi-Fi, volume) but without the Raspberry menu; no desktop icons. Lessons open full screen from the app and **Close lesson** brings the app back.
-The small **Teacher** button (admin password) has Kit Check, the folders, a terminal, *Normal desktop until restart* and *Kiosk mode OFF*.
-Install without kiosk mode: add `--no-kiosk`.
+With `--lock-games` (the default) every app in the Raspberry menu and top bar - web browser, terminal, files, settings, Minecraft, Doom, ... - asks for the admin password. CrowPi Lessons and Shutdown always open. Use `--no-lock-games` to leave everything open.
 
 ## What it changes on the kit
 

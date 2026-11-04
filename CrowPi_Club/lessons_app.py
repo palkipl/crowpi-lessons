@@ -33,7 +33,7 @@ import time
 import zipfile
 
 APP_NAME = "CrowPi Lessons"
-APP_VERSION = "2.2"                  # raise this for every new version: kits update by themselves
+APP_VERSION = "2.3"                  # raise this for every new version: kits update by themselves
 APP_ID = "crowpi-lessons"
 WINDOW_CLASS = "CrowPiLessons"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -117,7 +117,7 @@ GAMES = [
 # is kept here, not the password itself. Change it: see TEACHER_GUIDE.txt.
 GAMES_PASSWORD_SHA256 = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
 # Lessons taken out of the club (motor parts). "Install" removes old copies of them.
-RETIRED = ("vibration.py", "motion.py", "setup_kit.py", "stepmotor.py", "servo.py", "tilt.py", "blinking_led.py",
+RETIRED = ("kiosk.sh", "vibration.py", "motion.py", "setup_kit.py", "stepmotor.py", "servo.py", "tilt.py", "blinking_led.py",
            "sound.py", "rfid_read.py", "rfid_write.py", "matrix_buzzer.py")
 
 
@@ -543,8 +543,12 @@ def read_desktop_entry(path):
     return lines, values
 
 
+ALWAYS_OPEN = ("shutdown", "logout", "log-out", "reboot", "squeekboard", "onboard")   # never locked
+
+
 def installed_games():
-    """(file name, path, entry values) for every game in the Raspberry menu."""
+    """(file name, path, entry values) for EVERY app in the Raspberry menu (browser, terminal,
+    files, settings, Minecraft, ...) except CrowPi Lessons and Shutdown."""
     games = {}
     for folder in APP_FOLDERS:
         for path in sorted(glob.glob(os.path.join(folder, "*.desktop"))):
@@ -552,10 +556,12 @@ def installed_games():
             if name in games or name.startswith(APP_ID):
                 continue
             _lines, values = read_desktop_entry(path)
-            categories = values.get("Categories", "").split(";")
             words = (name + " " + values.get("Name", "") + " " + values.get("Exec", "")).lower()
-            is_game = "Game" in categories or any(word in words for word in GAME_WORDS)
-            if is_game and values.get("Exec") and values.get("NoDisplay", "").lower() != "true":
+            if any(word in words for word in ALWAYS_OPEN):
+                continue
+            if (values.get("Type", "Application") == "Application" and values.get("Exec")
+                    and values.get("NoDisplay", "").lower() != "true"
+                    and values.get("Hidden", "").lower() != "true"):
                 games[name] = (path, values)
     return games
 
@@ -588,7 +594,7 @@ def lock_installed_games(lock, folder=INSTALL_DIR, log=print):
             except OSError:
                 pass
     if not lock:
-        log("Installed games: open (no password)")
+        log("Apps on the kit: open (no password)")
         return []
     locked = []
     for name, (path, values) in installed_games().items():
@@ -613,7 +619,7 @@ def lock_installed_games(lock, folder=INSTALL_DIR, log=print):
             locked.append(title)
         except OSError as problem:
             log("Could not lock %s: %s" % (title, problem))
-    log("Installed games locked with the admin password: " + (", ".join(locked) or "none found"))
+    log("Apps locked with the admin password (%d): %s" % (len(locked), ", ".join(locked) or "none found"))
     return locked
 
 
@@ -713,7 +719,7 @@ def is_ours(path):
 
 
 def kiosk_on():
-    return load_config().get("kiosk", False) is True
+    return False                                 # (kiosk mode was taken out in version 2.3)
 
 
 def set_kiosk(on, folder=INSTALL_DIR, log=print):
@@ -865,7 +871,7 @@ def install_kit(source, log=print):
     except OSError as problem:
         log("Could not lock the installed games: " + str(problem))
     try:
-        set_kiosk(kiosk_on(), target, log)
+        set_kiosk(False, target, lambda _t: None)          # (older versions had kiosk mode: undo it)
     except OSError as problem:
         log("Could not set kiosk mode: " + str(problem))
     version = folder_version(target) or (0,)
@@ -972,8 +978,8 @@ def restart_kit():
 
 def open_folder(folder):
     os.makedirs(folder, exist_ok=True)
-    subprocess.Popen(["xdg-open", folder], stdout=subprocess.DEVNULL,
-                     stderr=subprocess.DEVNULL, start_new_session=True)
+    opener = ["pcmanfm", folder] if shutil.which("pcmanfm") else ["xdg-open", folder]   # (not through the app lock)
+    subprocess.Popen(opener, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
 
 # ==================================================================
@@ -1319,15 +1325,8 @@ class LessonsApp:
                  ("Open students' programs", lambda: open_folder(MY_PROGRAMS)),
                  ("Open the photos", lambda: open_folder(PHOTOS)),
                  ("Open a terminal", open_terminal)]
-        if self.kiosk:
-            items += [("Normal desktop until restart", self.pause_kiosk),
-                      ("Kiosk mode OFF (after restart)", lambda: self.switch_kiosk(False))]
-        else:
-            items += [("Kiosk mode ON (after restart)", lambda: self.switch_kiosk(True)),
-                      ("Opens at start-up: " + ("ON" if autostart_on() else "OFF"), self.toggle_autostart)]
-        items += [("Restart the kit", restart_kit)]
-        if not self.kiosk:
-            items += [("Close CrowPi Lessons", self.close)]
+        items += [("Opens at start-up: " + ("ON" if autostart_on() else "OFF"), self.toggle_autostart),
+                  ("Restart the kit", restart_kit), ("Close CrowPi Lessons", self.close)]
         for i, (text, command) in enumerate(items):
             item(text, command, row=i // 2, column=i % 2)
         self.button(window, "Back", window.destroy, COLORS[ANY], ACTIVE[ANY], 13, padx=20,

@@ -5,7 +5,7 @@
 #  Open this file in Thonny and click Run (or right-click >
 #  Open With > Python 3). It downloads the newest installer from
 #  github.com/palkipl/crowpi-lessons and opens it:
-#  ADD or REMOVE CrowPi Lessons, and lock the games or not.
+#  ADD or REMOVE CrowPi Lessons, and lock every app or not.
 #
 #  This file never goes out of date - it always gets the newest version.
 # ==================================================================
