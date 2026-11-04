@@ -18,6 +18,7 @@ import json
 import os
 import random
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -440,21 +441,20 @@ class ShowApp:
         root.title(title)
         root.configure(bg=BG)
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
-        if os.environ.get("CROWPI_FULLSCREEN"):          # (kiosk mode: the whole screen, no taskbar)
-            width, height = sw, sh
-            root.geometry("%dx%d+0+0" % (width, height))
-            try:
-                root.attributes("-fullscreen", True)
-            except tk.TclError:
-                pass
-        else:
-            width, height = min(sw - 24, 1000), min(sh - 76, 560)
-            root.geometry("%dx%d+%d+%d" % (width, height, (sw - width) // 2, 8))
+        width, height = sw, sh - 80                       # the whole screen under the top bar
+        root.geometry("%dx%d+0+0" % (width, height))
+        try:
+            root.attributes("-zoomed", True)              # maximized: fills the screen, the top bar stays
+        except tk.TclError:
+            pass
         root.minsize(760, 480)
-        self.scale = max(0.76, min(2.2, min(width / 1000, height / 560)))
+        self.scale = max(0.76, min(2.2, min(width / 1000, height / 520)))
         self.scores = self.load_scores()
         self.screen = None
         self.games_unlocked = False
+        self.photos_taken: list = []              # photos from this lesson (the yearbook picks one)
+        self.yearbook_done = True
+        self.yearbook_window = None
         root.protocol("WM_DELETE_WINDOW", self.close)
         self.build_header()
         self.build_footer()
@@ -759,6 +759,8 @@ class ShowApp:
     def close(self):
         if getattr(self, "closed", False):
             return
+        if [p for p in self.photos_taken if os.path.exists(p)] and self.yearbook_window is None:
+            choose_yearbook_photo(self)          # (photos not chosen yet: ask before closing)
         self.closed = True
         if self.screen:
             self.screen.leave()
@@ -3805,12 +3807,145 @@ def show_key_target(kit, key):
 
 
 # ---------------- Day 17: Camera ----------------
+YEARBOOK = os.path.join(os.path.expanduser("~"), "Pictures", "CrowPi_Photos", "Yearbook")
+
+
+def choose_yearbook_photo(app):
+    """Pick ONE photo from this lesson for the yearbook. That one is saved in
+    Pictures > CrowPi_Photos > Yearbook (with your name), the others are deleted.
+    Returns True when a photo was saved (or none was wanted)."""
+    photos = [p for p in app.photos_taken if os.path.exists(p)]
+    if not photos:
+        return True
+    window = tk.Toplevel(app.root, bg=BG)
+    window.title("Yearbook photo")
+    window.transient(app.root)
+    app.label(window, "Pick your yearbook photo", 18, WHITE, True).pack(padx=20, pady=(14, 2))
+    app.label(window, "Tap the photo you like best. Only that one is kept - the others are deleted.", 11,
+              TEXT).pack(padx=20)
+    row = tk.Frame(window, bg=BG)
+    row.pack(padx=20, pady=6)
+    app.label(row, "Your name:", 13, WHITE, True).pack(side="left")
+    name = tk.Entry(row, font=app.font(14, False), width=18)
+    name.pack(side="left", padx=8)
+    grid = tk.Frame(window, bg=BG)
+    grid.pack(padx=20, pady=6)
+    chosen: dict = {"path": None, "saved": False}
+    tiles = {}
+    images = []
+    size = int(200 * app.scale)
+    for i, path in enumerate(photos[-8:]):
+        tile = tk.Frame(grid, bg=PANEL, padx=4, pady=4, cursor="hand2")
+        tile.grid(row=i // 4, column=i % 4, padx=6, pady=6)
+        try:
+            from PIL import Image
+            small = os.path.join(os.path.expanduser("~"), ".crowpi_yearbook_%d.png" % i)
+            image = Image.open(path)
+            image.thumbnail((size, size))
+            image.save(small)
+            images.append(tk.PhotoImage(file=small))
+            picture = tk.Label(tile, image=images[-1], bg=PANEL)
+        except Exception:
+            picture = tk.Label(tile, text="Photo %d" % (i + 1), width=14, height=6, bg=PANEL_2, fg=WHITE,
+                               font=app.font(12))
+        picture.pack()
+        label = app.label(tile, "Photo %d" % (i + 1), 11, TEXT, True, bg=PANEL)
+        label.pack()
+        tiles[path] = tile
+
+        def pick(_event=None, p=path):
+            chosen["path"] = p
+            for other, t in tiles.items():
+                t.config(bg=GREEN if other == p else PANEL)
+            note.config(text="")
+        for widget in (tile, picture, label):
+            widget.bind("<Button-1>", pick)
+    note = app.label(window, "", 12, "#FF8A80", True)
+    note.pack()
+
+    def save():
+        if not chosen["path"]:
+            note.config(text="Tap a photo first!")
+            return
+        who = "".join(ch for ch in name.get().strip() if ch.isalnum() or ch in " -_")[:30].strip()
+        if not who:
+            note.config(text="Type your name first!")
+            name.focus_set()
+            return
+        os.makedirs(YEARBOOK, exist_ok=True)
+        target = os.path.join(YEARBOOK, who.replace(" ", "_") + os.path.splitext(chosen["path"])[1].lower())
+        shutil.copyfile(chosen["path"], target)
+        for path in photos:                         # only the yearbook photo is kept
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        app.photos_taken = []
+        app.yearbook_done = True
+        chosen["saved"] = True
+        print("[yearbook] saved", target)
+        window.destroy()
+
+    def none():
+        for path in photos:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        app.photos_taken = []
+        app.yearbook_done = True
+        chosen["saved"] = True
+        window.destroy()
+
+    buttons = tk.Frame(window, bg=BG)
+    buttons.pack(pady=(6, 14))
+    app.button(buttons, "Save this one for the yearbook", save, GREEN, 13, padx=16, pady=6).pack(side="left", padx=6)
+    app.button(buttons, "Keep none", none, PANEL_2, 11, padx=12, pady=6).pack(side="left", padx=6)
+    window.update_idletasks()
+    x = app.root.winfo_rootx() + (app.root.winfo_width() - window.winfo_width()) // 2
+    y = app.root.winfo_rooty() + (app.root.winfo_height() - window.winfo_height()) // 3
+    window.geometry("+%d+%d" % (max(0, x), max(0, y)))
+    try:
+        window.grab_set()
+    except tk.TclError:
+        pass
+    name.focus_force()
+    app.yearbook_window = window
+    app.root.wait_window(window)
+    app.yearbook_window = None
+    return chosen["saved"]
+
+
+class YearbookStep(Step):
+    """The last camera challenge: choose ONE photo for the yearbook."""
+    def __init__(self, show):
+        super().__init__(show, "Yearbook photo", "Pick your best photo for the class yearbook. "
+                         "Only that one is kept.", needs=("camera",))
+
+    def start(self):
+        super().start()
+        self.show.app.yearbook_done = False
+        self.show.app.button(self.show.extra, "Choose my yearbook photo", self.choose, ORANGE, 13,
+                             padx=14, pady=6).pack(anchor="w")
+
+    def choose(self):
+        choose_yearbook_photo(self.show.app)
+
+    def tick(self, events):
+        return bool(self.show.app.yearbook_done)
+
+    def live(self):
+        n = len([p for p in self.show.app.photos_taken if os.path.exists(p)])
+        return "%d photos to choose from" % n if n else "Take a photo first (Try it tab or the other challenges)."
+
+
 class CameraTry(TryScreen):
-    hint = "Photos are saved in Pictures > CrowPi_Photos."
+    hint = "Photos are saved in Pictures > CrowPi_Photos. Pick ONE for the yearbook!"
 
     def setup(self):
         row = self.row()
         self.btn(row, "Take a photo (3, 2, 1...)", self.countdown, ORANGE, 14)
+        self.btn(row, "Choose my yearbook photo", lambda: choose_yearbook_photo(self.app), GREEN, 14)
         self.status = self.app.label(self.left, "", 13, YELLOW, True)
         self.status.pack(anchor="w", pady=6)
         self.picture = tk.Label(self.left, bg=BG)
@@ -3848,7 +3983,10 @@ class CameraTry(TryScreen):
                 self.status.config(text="The photo didn't work - try again.")
                 return
             self.kit.beep(0.1)
-            self.status.config(text="Saved: " + os.path.basename(path))
+            self.app.photos_taken.append(path)
+            self.app.yearbook_done = False
+            self.status.config(text="Photo %d taken! Take more, then choose one for the yearbook."
+                                    % len(self.app.photos_taken))
             try:
                 from PIL import Image
                 small = os.path.join(os.path.expanduser("~"), ".crowpi_lesson_photo.png")
@@ -3890,6 +4028,7 @@ class Photo(Step):
             self.asked = False
             return False
         self.show.show_photo(self.path)
+        self.show.app.photos_taken.append(self.path)
         return True
 
     def live(self):
@@ -4496,7 +4635,8 @@ LESSONS = {
         [("Light into numbers", "A camera has millions of tiny light sensors. Each one measures one dot "
                                 "(pixel) of the picture."),
          ("Red, green, blue", "Every pixel is saved as three numbers: how red, how green, how blue."),
-         ("Saved as a file", "Your photos are saved in Pictures > CrowPi_Photos.")],
+         ("Your yearbook photo", "Take as many as you like, then pick ONE for the class yearbook - it's "
+                                       "saved with your name and the others are deleted.")],
         CameraTry,
         [lambda s: Photo(s, "Selfie!", "Look at the camera and take a selfie."),
          lambda s: Photo(s, "Favourite thing", "Hold up your favourite thing and take a photo of it.")],
@@ -5707,7 +5847,8 @@ MORE: dict = {   # lesson: ([extra Learn cards], [(position or None = at the end
     "camera": ([("Resolution", "More pixels = a sharper photo. A photo can have millions of pixels."),
                 ("Ask first", "Always ask before you take a photo of someone.")],
                [(None, lambda s: Photo(s, "Silly face", "Make your silliest face and take a photo.")),
-                (None, lambda s: Photo(s, "Team photo", "Get your team in the picture!"))]),
+                (None, lambda s: Photo(s, "Team photo", "Get your team in the picture!")),
+                (None, YearbookStep)]),
     "reaction": ([("Random waits", "The wait before the beep is random, so nobody can guess when to touch."),
                   ("Best score", "The program remembers your fastest time and checks if each new one is "
                                  "faster.")],

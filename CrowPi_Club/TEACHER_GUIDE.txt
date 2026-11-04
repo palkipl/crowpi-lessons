@@ -1,6 +1,6 @@
 CROWPI CLUB LESSONS  -  SETUP AND TEACHER GUIDE
 ================================================
-Version 2.1  -  for the Raspberry Pi 5 CrowPi kit (board v3.2)
+Version 2.2  -  for the Raspberry Pi 5 CrowPi kit (board v3.2)
 
 22 club days of hands-on lessons: sensors, screens, RFID cards, IR remote,
 camera, a button piano, project games and a finale show, plus a kit check
@@ -48,9 +48,10 @@ INSTALL  (about 1 minute per kit)
       python3 install_crowpi.py --remove
 
 KIOSK MODE  (on by default - the installer asks)
-  After a restart the kit shows ONLY CrowPi Lessons, full screen: no taskbar,
-  no desktop, no menu, no keyboard shortcuts. Lessons open full screen from the
-  app (Thonny isn't used) and "Close lesson" brings the app back. If the app is
+  After a restart the kit shows ONLY CrowPi Lessons, filling the screen. The top
+  bar stays (clock, Wi-Fi, volume) but without the Raspberry menu or app
+  launchers; no desktop icons, no keyboard shortcuts. Lessons open from the app
+  (Thonny isn't used) and "Close lesson" brings the app back. If the app is
   ever closed it opens again by itself.
   The way out for the teacher: the small "Teacher" button (top right) asks for
   the admin password and has:
@@ -193,7 +194,9 @@ Day  File                 Switches  What it is
 14   button_matrix.py     BUTTON    16-button grid - rows and columns
 15   piano.py             BUTTON    Button piano - 16 notes
 16   IR.py                any       IR remote (plug in the IR receiver)
-17   camera.py            any       Camera - photos (Pictures > CrowPi_Photos)
+17   camera.py            any       Camera - photos; each student picks ONE for the
+                                    yearbook: Pictures > CrowPi_Photos > Yearbook >
+                                    <name>.jpg (the other photos are deleted)
 18   reaction_game.py     any       Reaction game - milliseconds
 19   parking_sensor.py    any       Parking sensor - closer = faster beeps
 20   security_alarm.py    any       Security alarm - RFID key card + the distance

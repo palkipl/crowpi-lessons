@@ -25,7 +25,7 @@ After installing, close Thonny once (File > Exit) so lessons start by themselves
 
 ## Kiosk mode (on by default)
 
-After a restart the kit shows **only CrowPi Lessons**, full screen - no taskbar, no desktop, no menu. Lessons open full screen from the app and **Close lesson** brings the app back.
+After a restart the kit shows **only CrowPi Lessons**, filling the screen - the top bar stays (clock, Wi-Fi, volume) but without the Raspberry menu; no desktop icons. Lessons open full screen from the app and **Close lesson** brings the app back.
 The small **Teacher** button (admin password) has Kit Check, the folders, a terminal, *Normal desktop until restart* and *Kiosk mode OFF*.
 Install without kiosk mode: add `--no-kiosk`.
 

@@ -2,7 +2,8 @@
 # ==================================================================
 #  CrowPi Club - KIOSK MODE
 #  The desktop session starts this instead of the normal desktop:
-#  only CrowPi Lessons is on the screen (no taskbar, no desktop icons).
+#  only CrowPi Lessons is on the screen: the top bar without its menu,
+#  no desktop icons, no keyboard shortcuts.
 #  If the app is closed it opens again. The Teacher menu in the app
 #  (admin password) can bring the normal desktop back.
 #  Turn kiosk mode off: Teacher menu > Kiosk mode OFF, or run
@@ -33,11 +34,14 @@ while [ ! -f "$PAUSE" ]; do
 done
 rm -f "$PAUSE"
 
-# the normal desktop for the rest of this session (until the next restart)
+# the normal desktop for the rest of this session (until the next restart):
+# the top bar again with its menu (the app already put its settings back)
 if [ -n "$WAYLAND_DISPLAY" ] && command -v wf-panel-pi >/dev/null; then
-    wf-panel-pi &
+    pkill -x wf-panel-pi
+    sleep 2
+    pgrep -x wf-panel-pi >/dev/null || wf-panel-pi &
 elif command -v lxpanel >/dev/null; then
-    lxpanel --profile LXDE-pi &
+    pgrep -x lxpanel >/dev/null || lxpanel --profile LXDE-pi &
 fi
 command -v pcmanfm >/dev/null && pcmanfm --desktop --profile LXDE-pi &
 wait

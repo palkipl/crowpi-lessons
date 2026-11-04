@@ -33,7 +33,7 @@ import time
 import zipfile
 
 APP_NAME = "CrowPi Lessons"
-APP_VERSION = "2.1"                  # raise this for every new version: kits update by themselves
+APP_VERSION = "2.2"                  # raise this for every new version: kits update by themselves
 APP_ID = "crowpi-lessons"
 WINDOW_CLASS = "CrowPiLessons"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -629,6 +629,8 @@ KIOSK_PAUSE = os.path.join(HOME, ".crowpi_kiosk_pause")         # Teacher menu: 
 LABWC_AUTOSTART = os.path.join(CONFIG_HOME, "labwc", "autostart")
 LABWC_RC = os.path.join(CONFIG_HOME, "labwc", "rc.xml")
 LXDE_AUTOSTART = os.path.join(CONFIG_HOME, "lxsession", "LXDE-pi", "autostart")
+PANEL_INI = os.path.join(CONFIG_HOME, "wf-panel-pi.ini")          # the top bar (Wayland)
+MENU_WIDGETS = ("smenu", "menu", "launchers", "launcher")
 WAYFIRE_INI = os.path.join(CONFIG_HOME, "wayfire.ini")
 
 
@@ -637,6 +639,7 @@ def kiosk_files(folder):
     return {
         LABWC_AUTOSTART: "# %s - only CrowPi Lessons (delete this file for the normal desktop)\n"
                          "command -v kanshi >/dev/null && kanshi &\n"
+                         "if command -v lwrespawn >/dev/null; then lwrespawn wf-panel-pi & else wf-panel-pi & fi\n"
                          "bash \"%s\" &\n" % (KIOSK_MARK, script),
         LABWC_RC: '<?xml version="1.0"?>\n<!-- %s: no keyboard shortcuts or desktop menu -->\n'
                   "<labwc_config>\n"
@@ -648,13 +651,57 @@ def kiosk_files(folder):
                   '<action name="Focus"/><action name="Raise"/></mousebind></context>\n'
                   '    <context name="Client"><mousebind button="Left" action="Press">'
                   '<action name="Focus"/><action name="Raise"/></mousebind></context>\n'
+                  '    <context name="Close"><mousebind button="Left" action="Click">'
+                  '<action name="Close"/></mousebind></context>\n'
                   '    <context name="Root"><mousebind button="Right" action="Press">'
                   '<action name="None"/></mousebind></context>\n'
                   "  </mouse>\n"
                   "</labwc_config>\n" % KIOSK_MARK,
         LXDE_AUTOSTART: "# %s - only CrowPi Lessons (delete this file for the normal desktop)\n"
+                        "@lxpanel --profile LXDE-pi\n"
                         "@bash \"%s\"\n" % (KIOSK_MARK, script),
+        PANEL_INI: None,                          # (the top bar without the menu - see set_kiosk)
     }
+
+
+def panel_without_menu(path):
+    """The top bar's settings with the Raspberry menu and the app launchers taken off
+    (the clock, Wi-Fi, volume and the list of open windows stay)."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            lines = [l for l in f.read().splitlines() if KIOSK_MARK not in l]
+    except OSError:
+        lines = []
+    if "[panel]" not in [l.strip() for l in lines]:
+        lines = ["[panel]"] + lines
+    found = False
+    for i, line in enumerate(lines):
+        key, _, value = line.partition("=")
+        if key.strip() == "widgets_left":
+            words = [w for w in value.split() if w not in MENU_WIDGETS]
+            lines[i] = "widgets_left=" + " ".join(words)
+            found = True
+    if not found:
+        at = [l.strip() for l in lines].index("[panel]") + 1
+        lines.insert(at, "widgets_left=spacing4 window-list")
+    return "# %s: the top bar without the menu\n" % KIOSK_MARK + "\n".join(lines) + "\n"
+
+
+def kiosk_panel(menu):
+    """The top bar with the menu (teacher, normal desktop) or without it (kiosk)."""
+    backup = PANEL_INI + ".crowpi-backup"
+    try:
+        if menu:
+            if os.path.exists(backup):
+                shutil.copyfile(backup, PANEL_INI)
+            elif is_ours(PANEL_INI):
+                os.remove(PANEL_INI)
+        else:
+            text = panel_without_menu(backup if os.path.exists(backup) else PANEL_INI)
+            with open(PANEL_INI, "w", encoding="utf-8") as f:
+                f.write(text)
+    except OSError:
+        pass
 
 
 def is_ours(path):
@@ -673,6 +720,8 @@ def set_kiosk(on, folder=INSTALL_DIR, log=print):
     """Kiosk mode on or off (from the next start of the kit)."""
     for path, text in kiosk_files(folder).items():
         backup = path + ".crowpi-backup"
+        if text is None:                          # the top bar: keep it, but take the menu off
+            text = panel_without_menu(backup if os.path.exists(backup) else path)
         if on:
             if os.path.exists(path) and not is_ours(path) and not os.path.exists(backup):
                 shutil.copyfile(path, backup)
@@ -697,6 +746,7 @@ def set_kiosk(on, folder=INSTALL_DIR, log=print):
             if section != "[autostart]":
                 kept.append(line)
         kept += ["", "[autostart]", "# " + KIOSK_MARK, "autostart_wf_shell = false",
+                 "panel = wfrespawn wf-panel-pi",
                  'crowpi = bash "%s"' % os.path.join(folder, "kiosk.sh")]
         with open(WAYFIRE_INI, "w", encoding="utf-8") as f:
             f.write("# %s - the normal file is in wayfire.ini.crowpi-backup\n" % KIOSK_MARK + "\n".join(kept) + "\n")
@@ -948,9 +998,9 @@ class LessonsApp:
         root.title(APP_NAME)
         root.configure(bg=BG)
         screen_w, screen_h = root.winfo_screenwidth(), root.winfo_screenheight()
-        root.geometry("%dx%d+0+0" % (screen_w, screen_h))
-        self.fullscreen()                         # the whole screen, no taskbar
-        self.s = max(0.85, min(2.2, min(screen_w / 1000, screen_h / 560)))
+        root.geometry("%dx%d+0+0" % (screen_w, screen_h - 80))
+        self.fullscreen()                         # fills the screen; the top bar stays
+        self.s = max(0.85, min(2.2, min(screen_w / 1000, (screen_h - 80) / 520)))
         self.font = ("DejaVu Sans", int(12 * self.s), "bold")
         self.title_font = ("DejaVu Sans", int(26 * self.s), "bold")
         self.pad = max(3, int(5 * self.s))
@@ -985,10 +1035,14 @@ class LessonsApp:
         self.root.after(500, self.check_raise)
 
     def fullscreen(self):
+        """As big as the screen, under the top bar (maximized)."""
         try:
-            self.root.attributes("-fullscreen", True)
+            self.root.attributes("-zoomed", True)
         except self.tk.TclError:
-            pass
+            try:
+                self.root.state("zoomed")
+            except self.tk.TclError:
+                pass
 
     def close(self):
         save_buzzer_setting(True)                 # app closed: the buzzer is back to normal
@@ -1283,6 +1337,7 @@ class LessonsApp:
 
     def pause_kiosk(self):
         """The taskbar and desktop come back until the next restart."""
+        kiosk_panel(True)
         try:
             open(KIOSK_PAUSE, "w", encoding="utf-8").close()
         except OSError:
@@ -1565,6 +1620,8 @@ def main():
         except OSError as problem:
             print("Couldn't install:", problem)
 
+    if "--kiosk-session" in sys.argv and kiosk_on():
+        kiosk_panel(False)                        # (the top bar without the menu, every start)
     raise_event = threading.Event()
     instance = claim_single_instance(raise_event)
     if instance is None:
