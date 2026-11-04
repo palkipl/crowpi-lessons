@@ -1,6 +1,6 @@
 CROWPI CLUB LESSONS  -  SETUP AND TEACHER GUIDE
 ================================================
-Version 2.3  -  for the Raspberry Pi 5 CrowPi kit (board v3.2)
+Version 2.4  -  for the Raspberry Pi 5 CrowPi kit (board v3.2)
 
 22 club days of hands-on lessons: sensors, screens, RFID cards, IR remote,
 camera, a button piano, project games and a finale show, plus a kit check
@@ -102,7 +102,6 @@ OPTIONAL: .deb PACKAGE
 2. IN THE CLASSROOM
 ------------------------------------------------------------------
 THE CROWPI LESSONS APP  (full screen, made for kids who've never used a Pi)
-  - A big green START HERE button opens the next lesson not done yet.
   - One big button per day (Day 1 to Day 22), plus Matrix Lights and Games.
   - Green = any switches.  Orange = BUTTON MODE (see THE SWITCHES).
   - Orange lessons, and ones that need a part, show a "Get ready" window first.

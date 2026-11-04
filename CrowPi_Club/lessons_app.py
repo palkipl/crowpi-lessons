@@ -33,7 +33,7 @@ import time
 import zipfile
 
 APP_NAME = "CrowPi Lessons"
-APP_VERSION = "2.3"                  # raise this for every new version: kits update by themselves
+APP_VERSION = "2.4"                  # raise this for every new version: kits update by themselves
 APP_ID = "crowpi-lessons"
 WINDOW_CLASS = "CrowPiLessons"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -1132,15 +1132,6 @@ class LessonsApp:
         self.label(self.root, "Tap a day to start.  The lesson shows you what to do.  "
                               "Tap  Close lesson  when you're done.", 13, False, "#C9D3E3").pack(
             anchor="w", padx=18, pady=(2, 6))
-
-        nxt = self.next_lesson()                  # the big "start here" button
-        if nxt is not None:
-            text = "START HERE:   " + nxt[0].replace("\n", "  -  ") + "   >"
-            self.button(self.root, text, lambda: self.start(nxt), COLORS[ANY], ACTIVE[ANY], 17,
-                        pady=int(8 * self.s)).pack(fill="x", padx=16, pady=(0, 6))
-        else:
-            self.label(self.root, "All 22 days done - amazing!  Play any lesson again, or try the Games.",
-                       15, True, "#FFD866").pack(anchor="w", padx=18, pady=(0, 6))
 
         grid = tk.Frame(self.root, bg=BG)
         grid.pack(fill="both", expand=True, padx=12, pady=(2, 2))
