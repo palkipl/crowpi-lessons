@@ -15,7 +15,7 @@ import os
 import sys
 
 # Only the fingerprint (SHA-256) of the admin password is kept here.
-PASSWORD_SHA256 = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+PASSWORD_SHA256 = "fcd4e25bb2a919b986574a4432b396deccf6f119f1919efb4ce6e86e1227e9ac"
 
 
 def ask(name):
@@ -42,6 +42,20 @@ def ask(name):
         else:
             note.config(text="Wrong password")
             entry.delete(0, "end")
+
+    keypad = tk.Frame(root, bg="#1B2230")          # tap the numbers (touchscreen)
+    keypad.pack()
+    for i, key in enumerate(["1", "2", "3", "4", "5", "6", "7", "8", "9", "\u232B", "0", "C"]):
+        def press(key=key):
+            if key == "\u232B":
+                entry.delete(len(entry.get()) - 1, "end")
+            elif key == "C":
+                entry.delete(0, "end")
+            else:
+                entry.insert("end", key)
+        tk.Button(keypad, text=key, command=press, bg="#2A3347", fg="white", activebackground="#3A4560",
+                  activeforeground="white", relief="flat", font=("DejaVu Sans", 14, "bold"), width=3,
+                  cursor="hand2").grid(row=i // 3, column=i % 3, padx=3, pady=3)
 
     row = tk.Frame(root, bg="#1B2230")
     row.pack(pady=(6, 16))

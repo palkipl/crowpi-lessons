@@ -56,6 +56,29 @@ def _buzzer_switched_off():
 
 
 BUZZER_OFF = _buzzer_switched_off()
+
+# "Pi sound > buzzer" (sound_buzzer.py) uses the buzzer - a lesson needs it, so stop that.
+SOUND_BUZZER_PID = os.path.join(os.path.expanduser("~"), ".crowpi_sound_buzzer.pid")
+
+
+def _free_the_buzzer():
+    if os.path.basename(_program_file()) == "sound_buzzer.py":
+        return
+    try:
+        with open(SOUND_BUZZER_PID, encoding="utf-8") as f:
+            pid = int(f.read().strip())
+        os.kill(pid, 15)
+    except (OSError, ValueError):
+        return
+    for _ in range(20):                   # wait (up to 1 s) until it has let go of GPIO18
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            break
+        time.sleep(0.05)
+
+
+_free_the_buzzer()
 try:
     os.chdir(os.path.expanduser("~"))
 except OSError:

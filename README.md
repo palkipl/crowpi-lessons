@@ -33,6 +33,12 @@ With `--lock-games` (the default) every app in the Raspberry menu and top bar - 
 * CrowPi Lessons opens at start-up and is in Raspberry menu > Education.
 * No accounts, no tracking, nothing is sent anywhere. After installing, no internet is needed.
 
+## Auto updates
+
+Kits update themselves: about 20 seconds after CrowPi Lessons opens (and every 4 hours while it's open) it checks this repository. If `APP_VERSION` in `CrowPi_Club/lessons_app.py` is higher than the kit's, it downloads the repository, installs the new version (keeping the app lock, ticks and students' files) and reopens. No internet = nothing happens. Turn it off per kit: Teacher menu > Auto updates.
+
+To ship an update: change the files in `CrowPi_Club/`, raise `APP_VERSION`, and push to `main`.
+
 ## Offline
 
 Download this repository as a zip (green **Code** button > Download ZIP), put it on a USB stick next to `install_crowpi.py`, and run:

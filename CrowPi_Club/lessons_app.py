@@ -9,7 +9,7 @@
 #   - double-click "CrowPi Lessons" in the CrowPi_Club folder
 #     (it installs itself, then: Desktop icon, Raspberry menu > Education,
 #      and it opens by itself when the kit starts)
-#   - or install crowpi-lessons_1.7_all.deb (the same app as a normal
+#   - or install crowpi-lessons_2.5_all.deb (the same app as a normal
 #     Raspberry Pi OS package; its lessons live in /usr/share/crowpi-lessons)
 #
 #  Started from a folder with a NEWER version than the one installed, it
@@ -33,7 +33,7 @@ import time
 import zipfile
 
 APP_NAME = "CrowPi Lessons"
-APP_VERSION = "2.4"                  # raise this for every new version: kits update by themselves
+APP_VERSION = "2.5"                  # raise this for every new version: kits update by themselves
 APP_ID = "crowpi-lessons"
 WINDOW_CLASS = "CrowPiLessons"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -77,6 +77,42 @@ MODE_TEXT = {
     BUTTON: "BUTTON MODE\nLeft switch block (UX1): all 8 UP\nRight switch block (UX5): all 8 DOWN",
 }
 
+# The home screen colours: one per part of the club (first day, last day, name, colour)
+SECTIONS = [
+    (1, 4, "Start", "#3D7BEA"),
+    (5, 8, "Sensors", "#139E8A"),
+    (9, 12, "Screens + cards", "#8456E6"),
+    (13, 16, "Buttons + touch", "#D9447A"),
+    (17, 22, "Projects", "#E07B1F"),
+]
+
+
+def section_color(day_text):
+    try:
+        day = int(day_text.split()[-1])
+    except (ValueError, IndexError):
+        return COLORS[ANY]
+    for first, last, _name, color in SECTIONS:
+        if first <= day <= last:
+            return color
+    return COLORS[ANY]
+
+
+def mix(color, other, amount):
+    """A colour part of the way to another one (amount 0..1)."""
+    a = [int(color[i:i + 2], 16) for i in (1, 3, 5)]
+    b = [int(other[i:i + 2], 16) for i in (1, 3, 5)]
+    return "#%02X%02X%02X" % tuple(int(x + (y - x) * amount) for x, y in zip(a, b))
+
+
+def rounded(canvas, x0, y0, x1, y1, r, fill):
+    """A rounded rectangle on a canvas."""
+    r = max(1, min(r, (x1 - x0) // 2, (y1 - y0) // 2))
+    points = [x0 + r, y0, x1 - r, y0, x1, y0, x1, y0 + r, x1, y1 - r, x1, y1, x1 - r, y1,
+              x0 + r, y1, x0, y1, x0, y1 - r, x0, y0 + r, x0, y0]
+    return canvas.create_polygon(points, smooth=True, fill=fill, outline=fill)
+
+
 # (button text, file, switch mode, parts to plug in)
 LESSONS = [
     ("Day 1\nHello CrowPi", "hello_crowpi.py", ANY, ""),
@@ -115,7 +151,7 @@ GAMES = [
 ]
 # The Games button asks for the admin password. Only its fingerprint (SHA-256)
 # is kept here, not the password itself. Change it: see TEACHER_GUIDE.txt.
-GAMES_PASSWORD_SHA256 = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+GAMES_PASSWORD_SHA256 = "fcd4e25bb2a919b986574a4432b396deccf6f119f1919efb4ce6e86e1227e9ac"
 # Lessons taken out of the club (motor parts). "Install" removes old copies of them.
 RETIRED = ("kiosk.sh", "vibration.py", "motion.py", "setup_kit.py", "stepmotor.py", "servo.py", "tilt.py", "blinking_led.py",
            "sound.py", "rfid_read.py", "rfid_write.py", "matrix_buzzer.py")
@@ -937,6 +973,112 @@ def claim_single_instance(raise_event):
     return server
 
 
+# ==================================================================
+#  Auto updates (from github.com/palkipl/crowpi-lessons)
+#
+#  A while after the app opens (and every few hours while it stays open) it
+#  reads APP_VERSION from the newest lessons_app.py on GitHub. If that's newer,
+#  it downloads the lessons and the NEW version installs itself (the same as
+#  the installer's ADD, keeping the app-lock setting). No internet = nothing
+#  happens. Teacher menu > Auto updates ON/OFF turns it off.
+# ==================================================================
+GITHUB_REPO = "palkipl/crowpi-lessons"
+UPDATE_VERSION_URL = os.environ.get(
+    "CROWPI_VERSION_URL", "https://raw.githubusercontent.com/%s/main/CrowPi_Club/lessons_app.py" % GITHUB_REPO)
+UPDATE_ZIP_URL = os.environ.get(
+    "CROWPI_UPDATE_URL", "https://github.com/%s/archive/refs/heads/main.zip" % GITHUB_REPO)
+UPDATE_FIRST_CHECK = 20 * 1000            # ms after the app opens
+UPDATE_EVERY = 4 * 60 * 60 * 1000         # then every 4 hours
+
+
+def auto_update_on():
+    return load_config().get("auto_update", True)
+
+
+def version_numbers(text):
+    try:
+        return tuple(int(part) for part in text.strip().split("."))
+    except ValueError:
+        return None
+
+
+def fetch(url, timeout=20):
+    import urllib.request
+    request = urllib.request.Request(url, headers={"User-Agent": "CrowPi-Lessons/" + APP_VERSION,
+                                                   "Cache-Control": "no-cache"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return response.read()
+
+
+online_version_cache: dict = {}           # {"v": the last version seen online}
+
+
+def online_version():
+    """APP_VERSION of the newest lessons on GitHub, as numbers, or None (no internet)."""
+    online_version_cache["v"] = None
+    try:
+        text = fetch(UPDATE_VERSION_URL).decode("utf-8", "replace")
+    except Exception:
+        return None
+    for line in text.splitlines():
+        if line.startswith("APP_VERSION"):
+            try:
+                online_version_cache["v"] = version_numbers(line.split('"')[1])
+            except IndexError:
+                pass
+            break
+    return online_version_cache["v"]
+
+
+def download_update(log=print):
+    """Download the lessons zip and unpack only the lesson files into a new temp folder."""
+    import tempfile
+    data = fetch(UPDATE_ZIP_URL, timeout=60)
+    work = tempfile.mkdtemp(prefix="crowpi_update_")
+    zip_path = os.path.join(work, "update.zip")
+    with open(zip_path, "wb") as f:
+        f.write(data)
+    if not zipfile.is_zipfile(zip_path):
+        raise RuntimeError("the download isn't a zip file")
+    folder = os.path.join(work, "CrowPi_Club")
+    os.makedirs(folder)
+    with zipfile.ZipFile(zip_path) as archive:
+        apps = [n for n in archive.namelist() if n.endswith("lessons_app.py")]
+        if not apps:
+            raise RuntimeError("no lessons in the download")
+        prefix = sorted(apps, key=len)[0][:-len("lessons_app.py")]
+        for name in archive.namelist():
+            relative = name[len(prefix):] if name.startswith(prefix) else ""
+            if not relative or "/" in relative or "\\" in relative or relative.startswith(".") or name.endswith("/"):
+                continue                          # only the lesson files themselves
+            with archive.open(name) as source, open(os.path.join(folder, relative), "wb") as out:
+                shutil.copyfileobj(source, out)
+    log("Downloaded version %s" % version_text(folder_version(folder) or (0,)))
+    return work, folder
+
+
+def update_now(log=print):
+    """Install a newer version from GitHub. Returns the new version text, or None if
+    there's nothing newer (or no internet). The NEW version does the installing."""
+    newest = online_version()
+    if newest is None or newest <= (version_numbers(APP_VERSION) or (0,)):
+        return None
+    work, folder = download_update(log)
+    try:
+        got = folder_version(folder)
+        if got is None or got <= (version_numbers(APP_VERSION) or (0,)):
+            return None                           # (GitHub still serving the old zip - next time)
+        result = subprocess.run([sys.executable, os.path.join(folder, "lessons_app.py"), "--install", folder],
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True,
+                                cwd=HOME, env=dict(os.environ, CROWPI_RESTARTED="1"), timeout=300)
+        log(result.stdout)
+        if result.returncode != 0 or folder_version(INSTALL_DIR) != got:
+            raise RuntimeError("the new version didn't install")
+        return version_text(got)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
 BUZZER_SETTING = os.path.join(HOME, ".crowpi_buzzer.json")   # read by crowpi_kit.py
 
 
@@ -1012,12 +1154,81 @@ class LessonsApp:
         self.pad = max(3, int(5 * self.s))
         self.set_window_icon()
         self.root.after(500, self.check_raise)
+        self.sound_helper: "subprocess.Popen | None" = None
+        self.updating = False
+        self.update_ready = None                  # a newer version was installed: restart when nothing's open
         if folder:
             self.show_lessons()
             if just_installed:
                 self.root.after(400, self.installed_message)
+            elif "--updated" in sys.argv:
+                self.say("Updated to version %s!" % APP_VERSION)
+            if os.path.realpath(folder) == os.path.realpath(INSTALL_DIR):
+                self.root.after(UPDATE_FIRST_CHECK, self.auto_update)
         else:
             self.show_finder()
+
+    # ---------- auto updates ----------
+    def auto_update(self):
+        self.root.after(UPDATE_EVERY, self.auto_update)
+        if auto_update_on():
+            self.check_update(quiet=True)
+
+    def check_update(self, quiet=False):
+        """Look for a newer version on GitHub in the background (the window keeps working)."""
+        if self.updating or self.update_ready:
+            return
+        self.updating = True
+        if not quiet:
+            self.say("Checking for updates...")
+        result: dict = {}
+
+        def work():
+            try:
+                result["version"] = update_now(lambda _text: None)
+            except Exception as problem:           # (no internet, GitHub down, ...)
+                result["problem"] = str(problem)
+            result["done"] = True
+
+        def wait():
+            if not result.get("done"):
+                self.root.after(500, wait)
+                return
+            self.updating = False
+            if result.get("version"):
+                self.update_ready = result["version"]
+                self.say("Updated to version %s - restarting..." % self.update_ready)
+                self.root.after(3000, self.restart_when_free)
+            elif not quiet:
+                if result.get("problem"):
+                    self.message("Couldn't update", "The update didn't work:\n%s\n\n"
+                                 "Check the internet connection and try again." % result["problem"])
+                elif online_version_cache.get("v") is None:
+                    self.message("Couldn't check", "Couldn't reach GitHub - is the kit on the internet?")
+                else:
+                    self.message("Up to date", "This kit has the newest version (%s)." % APP_VERSION)
+                self.say("")
+
+        online_version_cache.clear()
+        threading.Thread(target=work, daemon=True).start()
+        self.root.after(500, wait)
+
+    def restart_when_free(self):
+        """Open the new version - but not while a window or a lesson started by the app is open."""
+        busy = any(isinstance(w, self.tk.Toplevel) for w in self.root.winfo_children())
+        busy = busy or (self.child is not None and self.child.poll() is None)
+        if busy:
+            self.root.after(5000, self.restart_when_free)
+            return
+        save_buzzer_setting(True)
+        self.stop_sound_buzzer()
+        app = os.path.join(INSTALL_DIR, "lessons_app.py")
+        os.execv(sys.executable, [sys.executable, app, "--updated"])
+
+    def toggle_auto_update(self):
+        save_config(auto_update=not auto_update_on())
+        self.say("Auto updates " + ("ON - the kit gets new versions from GitHub by itself."
+                                    if auto_update_on() else "OFF."))
 
     # ---------- helpers ----------
     def set_window_icon(self):
@@ -1052,13 +1263,34 @@ class LessonsApp:
 
     def close(self):
         save_buzzer_setting(True)                 # app closed: the buzzer is back to normal
+        self.stop_sound_buzzer()
         self.stop_lesson()
         self.root.destroy()
 
     def buzzer_switch(self, parent):
-        """A switch you click: Buzzer ON (green, knob right) / OFF (grey, knob left)."""
+        """Buzzer ON/OFF: may lessons and games use the buzzer?"""
+        def flip(on):
+            self.buzzer_on = on
+            save_buzzer_setting(on)
+            self.say("Buzzer ON." if on else "Buzzer OFF - lessons and games are quiet.")
+        return self.switch(parent, "Buzzer", lambda: self.buzzer_on, flip)
+
+    def sound_switch(self, parent):
+        """Pi sound > buzzer ON/OFF: whatever the Pi plays comes out of the buzzer."""
+        def flip(on):
+            if on:
+                self.start_sound_buzzer()
+            else:
+                self.stop_sound_buzzer()
+                self.say("Pi sound > buzzer OFF.")
+        box = self.switch(parent, "Pi sound > buzzer", self.sound_buzzer_on, flip)
+        self.sound_switch_box = box
+        return box
+
+    def switch(self, parent, text, get, set_to):
+        """A switch you click: ON (green, knob right) / OFF (grey, knob left)."""
         box = self.tk.Frame(parent, bg=BG)
-        self.label(box, "Buzzer", 11, True, "white").pack(side="left", padx=(0, 6))
+        self.label(box, text, 11, True, "white").pack(side="left", padx=(0, int(8 * self.s)))
         width, height = int(64 * self.s), int(28 * self.s)
         switch = self.tk.Canvas(box, width=width, height=height, bg=BG, highlightthickness=0,
                                 cursor="hand2")
@@ -1066,26 +1298,74 @@ class LessonsApp:
 
         def draw():
             switch.delete("all")
-            color = COLORS[ANY] if self.buzzer_on else "#5A6378"
+            on = get()
+            color = COLORS[ANY] if on else "#5A6378"
             r = height // 2
             switch.create_oval(0, 0, height, height, fill=color, outline=color)
             switch.create_oval(width - height, 0, width, height, fill=color, outline=color)
             switch.create_rectangle(r, 0, width - r, height, fill=color, outline=color)
-            knob = width - height + 3 if self.buzzer_on else 3
+            knob = width - height + 3 if on else 3
             switch.create_oval(knob, 3, knob + height - 6, height - 3, fill="white", outline="white")
-            switch.create_text(r + 2 if self.buzzer_on else width - r - 2, r,
-                               text="ON" if self.buzzer_on else "OFF", fill="white",
+            switch.create_text(r + 2 if on else width - r - 2, r,
+                               text="ON" if on else "OFF", fill="white",
                                font=("DejaVu Sans", int(9 * self.s), "bold"))
 
         def flip(_event=None):
-            self.buzzer_on = not self.buzzer_on
-            save_buzzer_setting(self.buzzer_on)
+            set_to(not get())
             draw()
-            self.say("Buzzer ON." if self.buzzer_on else "Buzzer OFF - lessons and games are quiet.")
 
         switch.bind("<Button-1>", flip)
+        box.redraw = draw
         draw()
         return box
+
+    # ---------- Pi sound through the buzzer (sound_buzzer.py) ----------
+    def sound_buzzer_on(self):
+        helper = getattr(self, "sound_helper", None)
+        return helper is not None and helper.poll() is None
+
+    def start_sound_buzzer(self):
+        if self.sound_buzzer_on():
+            return
+        path = os.path.join(self.folder or HERE, "sound_buzzer.py")
+        try:
+            self.sound_helper = subprocess.Popen([sys.executable, path], cwd=HOME, stdin=subprocess.DEVNULL,
+                                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except OSError as problem:
+            self.say("Couldn't start it: %s" % problem)
+            return
+        self.say("Sound > buzzer ON - play some music!")
+        self.root.after(1500, self.watch_sound_buzzer)
+
+    def watch_sound_buzzer(self):
+        helper = getattr(self, "sound_helper", None)
+        if helper is None:
+            return
+        if helper.poll() is None:
+            self.root.after(1000, self.watch_sound_buzzer)
+            return
+        self.sound_helper = None                   # it stopped by itself (no sound system / buzzer busy)
+        self.say("Sound > buzzer OFF (a lesson needs it)")
+        self.redraw_sound_switch()
+
+    def stop_sound_buzzer(self):
+        helper = getattr(self, "sound_helper", None)
+        self.sound_helper = None
+        if helper is not None and helper.poll() is None:
+            helper.terminate()
+            try:
+                helper.wait(timeout=3)
+            except subprocess.SubprocessError:
+                helper.kill()
+        self.redraw_sound_switch()
+
+    def redraw_sound_switch(self):
+        box = getattr(self, "sound_switch_box", None)
+        try:
+            if box is not None:
+                box.redraw()
+        except self.tk.TclError:
+            pass
 
     def clear(self):
         for child in self.root.winfo_children():
@@ -1122,19 +1402,42 @@ class LessonsApp:
         self.lesson_buttons = {}
         ensure_my_programs(self.folder)
         header = tk.Frame(self.root, bg=BG)
-        header.pack(fill="x", padx=16, pady=(12, 0))
+        header.pack(fill="x", padx=18, pady=(12, 0))
         title = self.label(header, APP_NAME, color="white")
         title.configure(font=self.title_font)
         title.pack(side="left")
-        self.button(header, "Teacher", self.teacher_menu, "#2A3347", "#3A4560", 9, padx=10,
-                    pady=3).pack(side="right", padx=(12, 0))
+        self.tile(header, {"kind": "pill", "text": "Teacher", "color": "#2A3347", "size": 10},
+                  self.teacher_menu, 100, 34).pack(side="right", padx=(14, 0))
         self.buzzer_switch(header).pack(side="right")
-        self.label(self.root, "Tap a day to start.  The lesson shows you what to do.  "
-                              "Tap  Close lesson  when you're done.", 13, False, "#C9D3E3").pack(
-            anchor="w", padx=18, pady=(2, 6))
+        self.sound_switch(header).pack(side="right", padx=(0, int(18 * self.s)))
 
+        info = tk.Frame(self.root, bg=BG)               # progress bar + what the colours mean
+        info.pack(fill="x", padx=20, pady=(4, 6))
+        self.progress_bar = tk.Canvas(info, height=int(22 * self.s), width=int(340 * self.s), bg=BG,
+                                      highlightthickness=0)
+        self.progress_bar.pack(side="left")
+        self.draw_progress()
+        legend = tk.Frame(info, bg=BG)
+        legend.pack(side="right")
+        for _first, _last, name, color in SECTIONS:
+            dot = tk.Canvas(legend, width=int(12 * self.s), height=int(12 * self.s), bg=BG, highlightthickness=0)
+            dot.create_oval(1, 1, int(12 * self.s) - 1, int(12 * self.s) - 1, fill=color, outline=color)
+            dot.pack(side="left", padx=(int(10 * self.s), 3))
+            self.label(legend, name, 10, True, "#AEB9CC").pack(side="left")
+
+        bottom = tk.Frame(self.root, bg=BG)
+        bottom.pack(side="bottom", fill="x", padx=14, pady=(4, 12))
+        self.tile(bottom, {"kind": "pill", "text": "Shut down", "color": "#C0392B", "size": 13},
+                  self.shut_down, 150, 46).pack(side="left", padx=self.pad)
+        games = {"kind": "pill", "text": "Games" if self.games_unlocked else "Games (locked)",
+                 "color": "#7B3FC4", "size": 13}
+        self.tile(bottom, games, self.open_games, 190, 46).pack(side="right", padx=self.pad)
+        for lesson in BONUS:
+            self.lesson_button(bottom, lesson, small=True).pack(side="right", padx=self.pad)
+        self.status = self.label(bottom, "", 11, True, "#FFD866", anchor="w")
+        self.status.pack(side="left", fill="x", expand=True, padx=10)
         grid = tk.Frame(self.root, bg=BG)
-        grid.pack(fill="both", expand=True, padx=12, pady=(2, 2))
+        grid.pack(fill="both", expand=True, padx=14, pady=(0, 2))
         columns = 6
         for i, lesson in enumerate(LESSONS):
             self.lesson_button(grid, lesson).grid(row=i // columns, column=i % columns,
@@ -1144,19 +1447,116 @@ class LessonsApp:
         for r in range((len(LESSONS) + columns - 1) // columns):
             grid.rowconfigure(r, weight=1, uniform="rows")
 
-        bottom = tk.Frame(self.root, bg=BG)
-        bottom.pack(fill="x", padx=12, pady=(2, 10))
-        self.button(bottom, "Shut down", self.shut_down, "#B23B3B", "#C94A4A", 13,
-                    width=10, pady=int(6 * self.s)).pack(side="left", padx=self.pad)
-        games_text = "Games" if self.games_unlocked else "Games  (locked)"
-        self.button(bottom, games_text, self.open_games, "#7B3FC4", "#8E52D8", 13,
-                    width=14, pady=int(6 * self.s)).pack(side="right", padx=self.pad)
-        for lesson in BONUS:
-            b = self.lesson_button(bottom, lesson, small=True)
-            b.pack(side="right", padx=self.pad)
-        self.status = self.label(bottom, "", 11, True, "#FFD866", anchor="w")
-        self.status.pack(side="left", fill="x", expand=True, padx=10)
-        self.say("Orange = BUTTON MODE")
+
+    # ---------- drawn buttons: rounded, light up under the mouse ----------
+    def tile(self, parent, info, command, width=150, height=90):
+        """A rounded button drawn on a canvas. info: kind ("lesson" or "pill"), color, text..."""
+        canvas = self.tk.Canvas(parent, width=int(width * self.s), height=int(height * self.s),
+                                bg=parent.cget("bg"), highlightthickness=0, bd=0, cursor="hand2")
+        info.setdefault("hover", False)
+        info.setdefault("pressed", False)
+        canvas.info = info
+
+        def redraw(_event=None):
+            self.draw_tile(canvas)
+
+        def set_state(key, value):
+            info[key] = value
+            redraw()
+
+        def release(event):
+            inside = 0 <= event.x <= canvas.winfo_width() and 0 <= event.y <= canvas.winfo_height()
+            set_state("pressed", False)
+            if inside:
+                command()
+
+        canvas.bind("<Configure>", redraw)
+        canvas.bind("<Enter>", lambda _e: set_state("hover", True))
+        canvas.bind("<Leave>", lambda _e: (info.update(pressed=False), set_state("hover", False)))
+        canvas.bind("<ButtonPress-1>", lambda _e: set_state("pressed", True))
+        canvas.bind("<ButtonRelease-1>", release)
+        return canvas
+
+    def draw_tile(self, canvas):
+        try:
+            canvas.delete("all")
+            w, h = canvas.winfo_width(), canvas.winfo_height()
+        except self.tk.TclError:
+            return
+        if w < 10 or h < 10:
+            return
+        info = canvas.info
+        s = self.s
+        color = info["color"]
+        if info["hover"]:
+            color = mix(color, "#FFFFFF", 0.14)
+        drop = 0 if info["pressed"] else max(2, int(3 * s))
+        r = min(int(14 * s), h // 3)
+        rounded(canvas, 0, drop, w, h, r, "#0F141D")                     # shadow
+        rounded(canvas, 0, drop - (0 if info["pressed"] else drop) + (drop if info["pressed"] else 0),
+                w, h - drop, r, color)
+        top = 0 if not info["pressed"] else max(2, int(3 * s))
+        if info["kind"] == "pill":
+            canvas.create_text(w // 2, top + (h - drop) // 2 - (top // 2), text=info["text"], fill="white",
+                               font=("DejaVu Sans", max(8, int(info.get("size", 12) * s)), "bold"))
+            return
+        pad = int(12 * s)
+        canvas.create_text(pad, top + int(10 * s), anchor="nw", text=info["day"].upper(),
+                           fill=mix(color, "#FFFFFF", 0.7), font=("DejaVu Sans", max(8, int(10 * s)), "bold"))
+        size = self.fit_title(info["title"], w - 2 * pad, h)
+        canvas.create_text(pad, top + int(26 * s), anchor="nw", text=info["title"],
+                           fill="white", width=w - 2 * pad, font=("DejaVu Sans", size, "bold"))
+        if info.get("button_mode"):                    # top right: needs BUTTON MODE switches
+            from tkinter import font as tkfont
+            day_width = tkfont.Font(family="DejaVu Sans", size=max(8, int(10 * s)), weight="bold").measure(
+                info["day"].upper())
+            room = w - pad - day_width - int(14 * s)
+            for text, size in (("BUTTON MODE", 8), ("BUTTON MODE", 7), ("BUTTONS", 7)):
+                font = tkfont.Font(family="DejaVu Sans", size=max(6, int(size * s)), weight="bold")
+                bw = font.measure(text) + int(12 * s)
+                if bw <= room:
+                    break
+            bh = int(18 * s)
+            x, y = w - bw - int(8 * s), top + int(8 * s)
+            rounded(canvas, x, y, x + bw, y + bh, bh // 2, mix(color, "#000000", 0.35))
+            canvas.create_text(x + bw // 2, y + bh // 2, text=text, fill="#FFE08A", font=font)
+        if info.get("done"):                           # bottom right: all challenges done
+            d = int(26 * s)
+            x0, y0 = w - d - int(8 * s), top + h - drop - d - int(8 * s)
+            canvas.create_oval(x0, y0, x0 + d, y0 + d, fill="white", outline="white")
+            canvas.create_line(x0 + d * 0.27, y0 + d * 0.52, x0 + d * 0.44, y0 + d * 0.7, x0 + d * 0.76, y0 + d * 0.32,
+                               fill="#2E9E5B", width=max(2, int(3.5 * s)), capstyle="round", joinstyle="round")
+
+    def fit_title(self, title, width, height):
+        """The biggest font size where every word of the title fits on the tile."""
+        from tkinter import font as tkfont
+        size = max(9, min(int(15 * self.s), int(height / 5.5)))
+        while size > 8:
+            f = tkfont.Font(family="DejaVu Sans", size=size, weight="bold")
+            if max(f.measure(word) for word in title.split()) <= width:
+                break
+            size -= 1
+        return size
+
+    def draw_progress(self):
+        bar = getattr(self, "progress_bar", None)
+        if bar is None:
+            return
+        try:
+            bar.delete("all")
+        except self.tk.TclError:
+            return
+        done = len([lesson for lesson in LESSONS if lesson[1] in lessons_done()])
+        w, h = int(bar.cget("width")), int(bar.cget("height"))
+        track = int(150 * self.s)
+        y0, y1 = h // 2 - int(5 * self.s), h // 2 + int(5 * self.s)
+        rounded(bar, 0, y0, track, y1, (y1 - y0) // 2, "#2A3347")
+        if done:
+            rounded(bar, 0, y0, max(y1 - y0, track * done // len(LESSONS)), y1, (y1 - y0) // 2, "#3DDC84")
+        bar.create_text(track + int(10 * self.s), h // 2, anchor="w", fill="#C9D3E3",
+                        text="%d of %d lessons done" % (done, len(LESSONS)),
+                        font=("DejaVu Sans", max(8, int(11 * self.s)), "bold"))
+        del w
 
     def clear_ticks(self):
         """Start the ticks again (e.g. a new student on this kit)."""
@@ -1166,8 +1566,7 @@ class LessonsApp:
             except OSError:
                 pass
         self.progress_time = 0.0
-        for b, text in list(self.lesson_buttons.values()):
-            b.config(text=text)
+        self.refresh_ticks()
         self.say("Ticks, Code tab values and missions cleared - every lesson starts fresh.")
 
     def toggle_autostart(self):
@@ -1179,17 +1578,15 @@ class LessonsApp:
     def lesson_button(self, parent, lesson, small=False):
         text, filename, mode = lesson[0], lesson[1], lesson[2]
         if small:
-            b = self.button(parent, self.with_tick(text.replace("\n", " "), filename), lambda: self.start(lesson),
-                            COLORS[mode], ACTIVE[mode], 13, padx=14, pady=int(6 * self.s))
+            info = {"kind": "pill", "text": text.replace("\n", " "), "color": "#D9822B", "size": 13}
+            tile = self.tile(parent, info, lambda: self.start(lesson), 170, 46)
         else:
-            b = self.button(parent, self.with_tick(text, filename), lambda: self.start(lesson), COLORS[mode],
-                            ACTIVE[mode], 13, width=1, height=2, wraplength=int(150 * self.s))
-        self.lesson_buttons[filename] = (b, text)
-        return b
-
-    def with_tick(self, text, filename):
-        """A tick on lessons whose challenges are all done."""
-        return text + "  \u2713" if filename in lessons_done() else text
+            day, _, name = text.partition("\n")
+            info = {"kind": "lesson", "day": day, "title": name, "color": section_color(day),
+                    "button_mode": mode == BUTTON, "done": filename in lessons_done()}
+            tile = self.tile(parent, info, lambda: self.start(lesson), 140, 90)
+        self.lesson_buttons[filename] = tile
+        return tile
 
     def update_ticks(self):
         try:
@@ -1198,11 +1595,15 @@ class LessonsApp:
             return
         if changed != self.progress_time:
             self.progress_time = changed
-            for filename, (b, text) in list(self.lesson_buttons.items()):
-                try:
-                    b.config(text=self.with_tick(text, filename))
-                except self.tk.TclError:
-                    pass
+            self.refresh_ticks()
+
+    def refresh_ticks(self):
+        done = lessons_done()
+        for filename, tile in list(self.lesson_buttons.items()):
+            if tile.info["kind"] == "lesson":
+                tile.info["done"] = filename in done
+                self.draw_tile(tile)
+        self.draw_progress()
 
     def start(self, lesson):
         text, filename, mode, parts = lesson
@@ -1214,6 +1615,8 @@ class LessonsApp:
             self.say("OK - nothing started.")
             return
         save_buzzer_setting(self.buzzer_on)       # the switch counts for every start
+        if self.sound_buzzer_on():                # the lesson needs the buzzer
+            self.stop_sound_buzzer()
         if self.kiosk and filename == "check_kit.py":             # text output: show it in a terminal
             open_terminal(["bash", "-c", 'python3 "%s"; echo; read -p "Press Enter to close "' % path])
             return
@@ -1317,6 +1720,8 @@ class LessonsApp:
                  ("Open the photos", lambda: open_folder(PHOTOS)),
                  ("Open a terminal", open_terminal)]
         items += [("Opens at start-up: " + ("ON" if autostart_on() else "OFF"), self.toggle_autostart),
+                  ("Auto updates: " + ("ON" if auto_update_on() else "OFF"), self.toggle_auto_update),
+                  ("Check for updates now", self.check_update),
                   ("Restart the kit", restart_kit), ("Close CrowPi Lessons", self.close)]
         for i, (text, command) in enumerate(items):
             item(text, command, row=i // 2, column=i % 2)
@@ -1382,7 +1787,7 @@ class LessonsApp:
         """Ask for the admin password. True if it is right."""
         window = self.popup("Admin password")
         self.label(window, title, 16, True, "white").pack(padx=24, pady=(14, 4))
-        self.label(window, "Type the admin password:", 12).pack(padx=24)
+        self.label(window, "Type or tap the admin password:", 12).pack(padx=24)
         entry = self.tk.Entry(window, show="*", font=("DejaVu Sans", 14), width=16)
         entry.pack(padx=24, pady=8)
         note = self.label(window, "", 11, True, "#FF8A80")
@@ -1403,6 +1808,20 @@ class LessonsApp:
                 note.config(text="Wrong password")
                 entry.delete(0, "end")
 
+        keypad = self.tk.Frame(window, bg=BG)                # tap the numbers (touchscreen)
+        keypad.pack(pady=(4, 0))
+        keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "\u232B", "0", "C"]
+        for i, key in enumerate(keys):
+            def press(key=key):
+                if key == "\u232B":
+                    entry.delete(len(entry.get()) - 1, "end")
+                elif key == "C":
+                    entry.delete(0, "end")
+                else:
+                    entry.insert("end", key)
+                note.config(text="")
+            self.button(keypad, key, press, "#2A3347", "#3A4560", 14, width=3,
+                        pady=int(4 * self.s)).grid(row=i // 3, column=i % 3, padx=3, pady=3)
         row = self.tk.Frame(window, bg=BG)
         row.pack(pady=(6, 14))
         self.button(row, "Unlock", check, COLORS[ANY], ACTIVE[ANY], 13,
@@ -1453,6 +1872,7 @@ class LessonsApp:
                                    "stops blinking before you switch it off.", parent=self.root):
             return
         self.say("Shutting down...")
+        self.stop_sound_buzzer()
         self.root.update()
         try:
             if subprocess.call(["systemctl", "poweroff"], timeout=20) != 0:

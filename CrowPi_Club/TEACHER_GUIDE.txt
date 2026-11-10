@@ -1,6 +1,6 @@
 CROWPI CLUB LESSONS  -  SETUP AND TEACHER GUIDE
 ================================================
-Version 2.4  -  for the Raspberry Pi 5 CrowPi kit (board v3.2)
+Version 2.5  -  for the Raspberry Pi 5 CrowPi kit (board v3.2)
 
 22 club days of hands-on lessons: sensors, screens, RFID cards, IR remote,
 camera, a button piano, project games and a finale show, plus a kit check
@@ -48,13 +48,12 @@ INSTALL  (about 1 minute per kit)
 LOCK EVERY APP  (the installer asks - "Yes" is the default)
   Every app in the Raspberry menu and on the top bar (web browser, terminal,
   file manager, settings, Thonny's menu icon, Minecraft, Doom, ...) and the
-  club games ask for the admin password (admin) before they open.
+  club games ask for the admin password (8421) before they open.
   CrowPi Lessons and Shutdown always open. Lessons still run in Thonny (the
   app starts Thonny itself, so students don't need the password for that).
   Apps installed later get locked the next time CrowPi Lessons opens.
   Unlock: run the installer again and choose No, or REMOVE.
-  This keeps students in the lessons; it is not a security lock against
-  someone who knows Linux (e.g. a terminal that is already open).
+  This keeps students in the lessons.
 
 WHAT THE INSTALLER CHANGES ON THE KIT  (all in the user's home folder)
   - ~/CrowPi_Club                 the lessons (locked read-only)
@@ -76,25 +75,29 @@ REMOVE
   want). If the optional .deb package was used, it asks for the admin
   password to remove that too.
 
-UPDATE
-  Run the installer with ADD again (or open a newer CrowPi_Club.zip and
-  double-click CrowPi Lessons in it). It updates by itself; an older copy
-  never replaces a newer one.
+AUTO UPDATES  (ON by default)
+  About 20 seconds after CrowPi Lessons opens, and every 4 hours while it
+  stays open, it checks github.com/palkipl/crowpi-lessons. If there is a
+  newer version it downloads it, installs it (keeping the app-lock setting,
+  ticks and students' files) and reopens itself - it waits until no window
+  or lesson started by the app is open. No internet = nothing happens.
+  Teacher menu > "Auto updates: ON/OFF" turns it off for that kit, and
+  "Check for updates now" checks straight away.
+  By hand: run the installer with ADD again. An older copy never replaces a
+  newer one.
 
 GAMES LOCK
-  Yes = the Games button asks for the admin password (default:  admin ).
+  Yes = the Games button asks for the admin password (default:  8421 ).
   No  = games are open to everyone. Run the installer again to change it.
-  This is a light lock, like a closed door: the game files are in the lesson
-  folder. The password is not stored in the app (only a scrambled
-  fingerprint of it).
+  The password is not stored in the app (only a scrambled fingerprint of it).
 
 SHUT DOWN
   The lessons and the app have a Shut down button. It uses the normal
   desktop shutdown (the same as Raspberry menu > Shutdown) and asks first.
 
 OPTIONAL: .deb PACKAGE
-  crowpi-lessons_2.0_all.deb is another way to deliver the same app:
-      sudo apt install --no-install-recommends ~/Downloads/crowpi-lessons_2.0_all.deb
+  crowpi-lessons_2.5_all.deb is another way to deliver the same app:
+      sudo apt install --no-install-recommends ~/Downloads/crowpi-lessons_2.5_all.deb
   then restart the kit. The installer is easier; you don't need both.
 
 
@@ -102,16 +105,23 @@ OPTIONAL: .deb PACKAGE
 2. IN THE CLASSROOM
 ------------------------------------------------------------------
 THE CROWPI LESSONS APP  (full screen, made for kids who've never used a Pi)
-  - One big button per day (Day 1 to Day 22), plus Matrix Lights and Games.
-  - Green = any switches.  Orange = BUTTON MODE (see THE SWITCHES).
-  - Orange lessons, and ones that need a part, show a "Get ready" window first.
+  - One big tile per day (Day 1 to Day 22), plus Matrix Lights and Games.
+    Colours = the part of the club: Start, Sensors, Screens + cards,
+    Buttons + touch, Projects. The bar at the top shows how many are done.
+  - A yellow BUTTONS tag = the lesson needs BUTTON MODE (see THE SWITCHES).
+    Those lessons, and ones that need a part, show a "Get ready" window first.
+  - "Pi sound > buzzer" switch (top): whatever the Pi plays (a YouTube video,
+    music, a game) comes out of the buzzer, one note at a time, like an old
+    video game. It turns itself off when a lesson starts (lessons need the
+    buzzer) and when the app closes.
   - Buzzer switch (top): OFF = lessons run silently. It is ON every time the
     app opens.
   - A tick shows on every lesson whose challenges are all done.
   - Shut down (bottom left) turns the kit off properly.
-  - Teacher (top right, admin password): Kit Check, Clear ticks (for a new
-    group - also resets the Code tab values and missions), the folders,
-    a terminal, opens at start-up ON/OFF, restart, close the app.
+  - Teacher (top right, admin password 8421 - type it or tap the keypad):
+    Kit Check, Clear ticks (for a new group - also resets the Code tab values
+    and missions), the folders, a terminal, opens at start-up ON/OFF, auto
+    updates ON/OFF, check for updates now, restart, close the app.
 
 EVERY LESSON IS AN APP
   Switch Check - (BUTTON MODE lessons) press an arrow or grid button to
@@ -199,7 +209,8 @@ Games game_snake.py, game_whack.py, game_guess.py   (BUTTON)
 
 Other files: lessons_app.py (the app), crowpi_app.py (the lesson apps),
 crowpi_kit.py (talks to the hardware), crowpi_thonny_plugin.py (Thonny
-helper), install_crowpi.py (the installer). Don't change them.
+helper), sound_buzzer.py (Pi sound > buzzer), install_crowpi.py (the
+installer). Don't change them.
 
 
 ------------------------------------------------------------------

@@ -49,7 +49,7 @@ GREY = "#5A6378"
 ARROW_PINS = {"UP": 26, "DOWN": 13, "LEFT": 25, "RIGHT": 19}
 # Games need the admin password (the same one as in CrowPi Lessons).
 # Only its fingerprint (SHA-256) is kept here, not the password itself.
-GAMES_PASSWORD_SHA256 = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+GAMES_PASSWORD_SHA256 = "fcd4e25bb2a919b986574a4432b396deccf6f119f1919efb4ce6e86e1227e9ac"
 TESTING = bool(os.environ.get("CROWPI_SHOW_TEST"))       # (only for testing the app)
 SCORES_FILE = os.path.join(os.path.expanduser("~"), ".crowpi_show_scores.json")
 PROGRESS_FILE = os.path.join(os.path.expanduser("~"), ".crowpi_progress.json")
