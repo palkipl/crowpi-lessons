@@ -9,7 +9,7 @@
 #   - double-click "CrowPi Lessons" in the CrowPi_Club folder
 #     (it installs itself, then: Desktop icon, Raspberry menu > Education,
 #      and it opens by itself when the kit starts)
-#   - or install crowpi-lessons_2.5_all.deb (the same app as a normal
+#   - or install crowpi-lessons_2.6_all.deb (the same app as a normal
 #     Raspberry Pi OS package; its lessons live in /usr/share/crowpi-lessons)
 #
 #  Started from a folder with a NEWER version than the one installed, it
@@ -33,7 +33,7 @@ import time
 import zipfile
 
 APP_NAME = "CrowPi Lessons"
-APP_VERSION = "2.5"                  # raise this for every new version: kits update by themselves
+APP_VERSION = "2.6"                  # raise this for every new version: kits update by themselves
 APP_ID = "crowpi-lessons"
 WINDOW_CLASS = "CrowPiLessons"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -1450,19 +1450,24 @@ class LessonsApp:
 
     # ---------- drawn buttons: rounded, light up under the mouse ----------
     def tile(self, parent, info, command, width=150, height=90):
-        """A rounded button drawn on a canvas. info: kind ("lesson" or "pill"), color, text..."""
+        """A rounded button drawn on a canvas. info: kind ("lesson" or "pill"), color, text...
+        It's drawn only when its size changes; the mouse only changes its colour (fast)."""
         canvas = self.tk.Canvas(parent, width=int(width * self.s), height=int(height * self.s),
                                 bg=parent.cget("bg"), highlightthickness=0, bd=0, cursor="hand2")
         info.setdefault("hover", False)
         info.setdefault("pressed", False)
+        info["drawn"] = None
         canvas.info = info
 
-        def redraw(_event=None):
-            self.draw_tile(canvas)
+        def resized(event):
+            if info["drawn"] != (event.width, event.height) and not info.get("waiting"):
+                info["waiting"] = True             # draw once when resizing stops, not on every step
+                canvas.after(60, lambda: (info.update(waiting=False), self.draw_tile(canvas)))
 
         def set_state(key, value):
-            info[key] = value
-            redraw()
+            if info[key] != value:
+                info[key] = value
+                self.color_tile(canvas)
 
         def release(event):
             inside = 0 <= event.x <= canvas.winfo_width() and 0 <= event.y <= canvas.winfo_height()
@@ -1470,70 +1475,94 @@ class LessonsApp:
             if inside:
                 command()
 
-        canvas.bind("<Configure>", redraw)
+        canvas.bind("<Configure>", resized)
         canvas.bind("<Enter>", lambda _e: set_state("hover", True))
-        canvas.bind("<Leave>", lambda _e: (info.update(pressed=False), set_state("hover", False)))
+        canvas.bind("<Leave>", lambda _e: (set_state("pressed", False), set_state("hover", False)))
         canvas.bind("<ButtonPress-1>", lambda _e: set_state("pressed", True))
         canvas.bind("<ButtonRelease-1>", release)
         return canvas
 
+    def tile_color(self, info):
+        if info["pressed"]:
+            return mix(info["color"], "#000000", 0.15)
+        if info["hover"]:
+            return mix(info["color"], "#FFFFFF", 0.14)
+        return info["color"]
+
+    def color_tile(self, canvas):
+        """Mouse over / pressed: just recolour the tile (no redrawing)."""
+        try:
+            color = self.tile_color(canvas.info)
+            canvas.itemconfigure("body", fill=color, outline=color)
+            canvas.itemconfigure("day", fill=mix(color, "#FFFFFF", 0.7))
+        except self.tk.TclError:
+            pass
+
+    def get_font(self, size):
+        """The same font object every time (making fonts is slow)."""
+        cache = self.__dict__.setdefault("font_cache", {})
+        if size not in cache:
+            from tkinter import font as tkfont
+            cache[size] = tkfont.Font(root=self.root, family="DejaVu Sans", size=size, weight="bold")
+        return cache[size]
+
+    def text_width(self, text, size):
+        cache = self.__dict__.setdefault("width_cache", {})
+        if (text, size) not in cache:
+            cache[(text, size)] = self.get_font(size).measure(text)
+        return cache[(text, size)]
+
     def draw_tile(self, canvas):
         try:
-            canvas.delete("all")
             w, h = canvas.winfo_width(), canvas.winfo_height()
+            canvas.delete("all")
         except self.tk.TclError:
             return
         if w < 10 or h < 10:
             return
         info = canvas.info
+        info["drawn"] = (w, h)
         s = self.s
-        color = info["color"]
-        if info["hover"]:
-            color = mix(color, "#FFFFFF", 0.14)
-        drop = 0 if info["pressed"] else max(2, int(3 * s))
+        color = self.tile_color(info)
+        drop = max(2, int(3 * s))
         r = min(int(14 * s), h // 3)
         rounded(canvas, 0, drop, w, h, r, "#0F141D")                     # shadow
-        rounded(canvas, 0, drop - (0 if info["pressed"] else drop) + (drop if info["pressed"] else 0),
-                w, h - drop, r, color)
-        top = 0 if not info["pressed"] else max(2, int(3 * s))
+        body = rounded(canvas, 0, 0, w, h - drop, r, color)
+        canvas.addtag_withtag("body", body)
         if info["kind"] == "pill":
-            canvas.create_text(w // 2, top + (h - drop) // 2 - (top // 2), text=info["text"], fill="white",
-                               font=("DejaVu Sans", max(8, int(info.get("size", 12) * s)), "bold"))
+            canvas.create_text(w // 2, (h - drop) // 2, text=info["text"], fill="white",
+                               font=self.get_font(max(8, int(info.get("size", 12) * s))))
             return
         pad = int(12 * s)
-        canvas.create_text(pad, top + int(10 * s), anchor="nw", text=info["day"].upper(),
-                           fill=mix(color, "#FFFFFF", 0.7), font=("DejaVu Sans", max(8, int(10 * s)), "bold"))
+        day_size = max(8, int(10 * s))
+        canvas.create_text(pad, int(10 * s), anchor="nw", text=info["day"].upper(), tags="day",
+                           fill=mix(color, "#FFFFFF", 0.7), font=self.get_font(day_size))
         size = self.fit_title(info["title"], w - 2 * pad, h)
-        canvas.create_text(pad, top + int(26 * s), anchor="nw", text=info["title"],
-                           fill="white", width=w - 2 * pad, font=("DejaVu Sans", size, "bold"))
+        canvas.create_text(pad, int(26 * s), anchor="nw", text=info["title"],
+                           fill="white", width=w - 2 * pad, font=self.get_font(size))
         if info.get("button_mode"):                    # top right: needs BUTTON MODE switches
-            from tkinter import font as tkfont
-            day_width = tkfont.Font(family="DejaVu Sans", size=max(8, int(10 * s)), weight="bold").measure(
-                info["day"].upper())
-            room = w - pad - day_width - int(14 * s)
+            room = w - pad - self.text_width(info["day"].upper(), day_size) - int(14 * s)
             for text, size in (("BUTTON MODE", 8), ("BUTTON MODE", 7), ("BUTTONS", 7)):
-                font = tkfont.Font(family="DejaVu Sans", size=max(6, int(size * s)), weight="bold")
-                bw = font.measure(text) + int(12 * s)
+                size = max(6, int(size * s))
+                bw = self.text_width(text, size) + int(12 * s)
                 if bw <= room:
                     break
             bh = int(18 * s)
-            x, y = w - bw - int(8 * s), top + int(8 * s)
-            rounded(canvas, x, y, x + bw, y + bh, bh // 2, mix(color, "#000000", 0.35))
-            canvas.create_text(x + bw // 2, y + bh // 2, text=text, fill="#FFE08A", font=font)
+            x, y = w - bw - int(8 * s), int(8 * s)
+            rounded(canvas, x, y, x + bw, y + bh, bh // 2, mix(info["color"], "#000000", 0.35))
+            canvas.create_text(x + bw // 2, y + bh // 2, text=text, fill="#FFE08A", font=self.get_font(size))
         if info.get("done"):                           # bottom right: all challenges done
             d = int(26 * s)
-            x0, y0 = w - d - int(8 * s), top + h - drop - d - int(8 * s)
+            x0, y0 = w - d - int(8 * s), h - drop - d - int(8 * s)
             canvas.create_oval(x0, y0, x0 + d, y0 + d, fill="white", outline="white")
             canvas.create_line(x0 + d * 0.27, y0 + d * 0.52, x0 + d * 0.44, y0 + d * 0.7, x0 + d * 0.76, y0 + d * 0.32,
                                fill="#2E9E5B", width=max(2, int(3.5 * s)), capstyle="round", joinstyle="round")
 
     def fit_title(self, title, width, height):
         """The biggest font size where every word of the title fits on the tile."""
-        from tkinter import font as tkfont
         size = max(9, min(int(15 * self.s), int(height / 5.5)))
         while size > 8:
-            f = tkfont.Font(family="DejaVu Sans", size=size, weight="bold")
-            if max(f.measure(word) for word in title.split()) <= width:
+            if max(self.text_width(word, size) for word in title.split()) <= width:
                 break
             size -= 1
         return size

@@ -1,6 +1,6 @@
 CROWPI CLUB LESSONS  -  SETUP AND TEACHER GUIDE
 ================================================
-Version 2.5  -  for the Raspberry Pi 5 CrowPi kit (board v3.2)
+Version 2.6  -  for the Raspberry Pi 5 CrowPi kit (board v3.2)
 
 22 club days of hands-on lessons: sensors, screens, RFID cards, IR remote,
 camera, a button piano, project games and a finale show, plus a kit check
@@ -96,8 +96,8 @@ SHUT DOWN
   desktop shutdown (the same as Raspberry menu > Shutdown) and asks first.
 
 OPTIONAL: .deb PACKAGE
-  crowpi-lessons_2.5_all.deb is another way to deliver the same app:
-      sudo apt install --no-install-recommends ~/Downloads/crowpi-lessons_2.5_all.deb
+  crowpi-lessons_2.6_all.deb is another way to deliver the same app:
+      sudo apt install --no-install-recommends ~/Downloads/crowpi-lessons_2.6_all.deb
   then restart the kit. The installer is easier; you don't need both.
 
 
